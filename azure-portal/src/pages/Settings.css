@@ -1,0 +1,34 @@
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.settings-content {
+  background: var(--white);
+  border-radius: 8px;
+  box-shadow: var(--card-shadow);
+  padding: 16px;
+}
+
+.settings-content .ant-table {
+  background: transparent;
+}
+
+.settings-content .ant-table-thead > tr > th {
+  background: #fafafa;
+}

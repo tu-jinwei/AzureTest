@@ -1,0 +1,106 @@
+.sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  height: calc(100vh - var(--topbar-height));
+  background: var(--white);
+  border-right: 1px solid var(--border-color);
+  position: fixed;
+  top: var(--topbar-height);
+  left: 0;
+  overflow-y: auto;
+  transition: width 0.2s ease, min-width 0.2s ease;
+  z-index: 999;
+}
+
+.sidebar-collapsed {
+  width: 60px;
+  min-width: 60px;
+}
+
+.sidebar-nav {
+  padding: 12px 0;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 20px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 14px;
+  transition: all 0.2s ease;
+  position: relative;
+  gap: 10px;
+}
+
+.sidebar-item:hover {
+  background: var(--primary-light);
+  color: var(--primary-color);
+}
+
+.sidebar-item.active {
+  background: var(--primary-color);
+  color: white;
+  border-radius: 6px;
+  margin: 2px 8px;
+  padding: 10px 12px;
+}
+
+.sidebar-item.active:hover {
+  background: var(--primary-hover);
+  color: white;
+}
+
+.sidebar-item.active-parent {
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
+.sidebar-item-icon {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+}
+
+.sidebar-item-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-expand-icon {
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-parent {
+  font-weight: 500;
+}
+
+.sidebar-children {
+  padding-left: 12px;
+}
+
+.sidebar-child {
+  font-size: 13px;
+  padding: 8px 20px;
+}
+
+.sidebar-menu-group {
+  margin-bottom: 2px;
+}
+
+/* 收合狀態 */
+.sidebar-collapsed .sidebar-item {
+  justify-content: center;
+  padding: 12px;
+}
+
+.sidebar-collapsed .sidebar-item.active {
+  margin: 2px 4px;
+  padding: 12px 8px;
+}

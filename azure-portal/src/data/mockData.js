@@ -1,0 +1,262 @@
+// ===== 公告資料 =====
+export const announcements = [
+  {
+    id: 1,
+    subject: '海外規範更版',
+    date: '2026.01.01',
+    isNew: true,
+    content:
+      'The overseas compliance framework has been updated to version 3.2. All project managers are required to review the updated guidelines and ensure alignment with the new regulatory standards before Q2 2026.',
+    attachment: {
+      name: 'Overseas_Compliance_v3.2.pdf',
+      coverUrl: '/mock-cover-1.png',
+      pdfUrl: '#',
+    },
+  },
+  {
+    id: 2,
+    subject: '專案方法論',
+    date: '2025.12.01',
+    isNew: true,
+    content:
+      'A new project methodology has been introduced to streamline cross-functional collaboration. The methodology integrates agile and waterfall approaches for hybrid project management across departments.',
+    attachment: {
+      name: 'Project_Methodology_2026.pdf',
+      coverUrl: '/mock-cover-2.png',
+      pdfUrl: '#',
+    },
+  },
+  {
+    id: 3,
+    subject: '年度資安政策更新',
+    date: '2025.11.15',
+    isNew: false,
+    content:
+      'Annual cybersecurity policy has been revised. All employees must complete the mandatory security training by end of January 2026. Please refer to the attached document for details.',
+    attachment: {
+      name: 'Security_Policy_2026.pdf',
+      coverUrl: '/mock-cover-3.png',
+      pdfUrl: '#',
+    },
+  },
+  {
+    id: 4,
+    subject: '新進人員訓練手冊',
+    date: '2025.10.20',
+    isNew: false,
+    content:
+      'The onboarding training manual has been updated with new modules covering cloud architecture basics and internal tool usage. New hires should complete all modules within their first month.',
+    attachment: null,
+  },
+];
+
+// ===== Agent 資料 =====
+export const agents = [
+  {
+    id: 1,
+    name: '【EPMO】VMO Satellite',
+    model: 'gpt-4o',
+    status: '可用',
+    icon: '🛰️',
+    color: '#4FC3F7',
+    description: 'VMO 衛星監控代理，協助追蹤專案進度與風險。',
+  },
+  {
+    id: 2,
+    name: '【EPMO】Talent Agent',
+    model: 'gpt-4o',
+    status: '可用',
+    icon: '👤',
+    color: '#81C784',
+    description: '人才管理代理，協助人力資源配置與評估。',
+  },
+  {
+    id: 3,
+    name: '【EPMO】RISKO.beta(影印問題版)',
+    model: 'gpt-4o',
+    status: '可用',
+    icon: '🔥',
+    color: '#FF8A65',
+    description: '風險評估代理，識別並分析專案潛在風險。',
+  },
+  {
+    id: 4,
+    name: '【EPMO】Coordinator Agent (Dr. PJ Jr.)',
+    model: 'gpt-4.1',
+    status: '可用',
+    icon: '🤖',
+    color: '#9575CD',
+    description: '專案協調代理，協助跨部門溝通與任務分配。',
+  },
+  {
+    id: 5,
+    name: '【EPMO】project 專案顧問',
+    model: 'gpt-4.1',
+    status: '可用',
+    icon: '📋',
+    color: '#4DB6AC',
+    description: '專案顧問代理，提供專案管理建議與最佳實踐。',
+  },
+];
+
+// ===== 對話歷史 =====
+export const chatHistory = [
+  {
+    id: 1,
+    agentId: 4,
+    agentName: '【EPMO】Coordinator Agent (Dr. PJ Jr.)',
+    lastMessage: '已完成本週專案進度報告的彙整...',
+    timestamp: '2026-01-15 14:30',
+    messages: [
+      { role: 'user', content: '請幫我彙整本週專案進度報告', time: '14:25' },
+      {
+        role: 'assistant',
+        content: '已完成本週專案進度報告的彙整，以下是各部門的進度摘要...',
+        time: '14:30',
+      },
+    ],
+  },
+  {
+    id: 2,
+    agentId: 5,
+    agentName: '【EPMO】project 專案顧問',
+    lastMessage: '根據您的需求，建議採用敏捷開發方法...',
+    timestamp: '2026-01-14 10:15',
+    messages: [
+      { role: 'user', content: '新專案應該用什麼開發方法？', time: '10:10' },
+      {
+        role: 'assistant',
+        content: '根據您的需求，建議採用敏捷開發方法，以下是詳細建議...',
+        time: '10:15',
+      },
+    ],
+  },
+  {
+    id: 3,
+    agentId: 1,
+    agentName: '【EPMO】VMO Satellite',
+    lastMessage: '目前有 3 個專案存在延遲風險...',
+    timestamp: '2026-01-13 16:45',
+    messages: [
+      { role: 'user', content: '目前有哪些專案有延遲風險？', time: '16:40' },
+      {
+        role: 'assistant',
+        content: '目前有 3 個專案存在延遲風險，分別是...',
+        time: '16:45',
+      },
+    ],
+  },
+];
+
+// ===== 線上圖書館 =====
+export const libraries = [
+  {
+    id: 1,
+    name: 'Cloud Architecture',
+    documents: [
+      {
+        id: 101,
+        name: 'AWS Best Practices Guide',
+        description: 'Comprehensive guide for AWS cloud architecture design patterns and best practices.',
+        coverUrl: '/mock-doc-cover.png',
+        pdfUrl: '#',
+      },
+      {
+        id: 102,
+        name: 'Azure Fundamentals',
+        description: 'Introduction to Microsoft Azure services and cloud computing concepts.',
+        coverUrl: '/mock-doc-cover.png',
+        pdfUrl: '#',
+      },
+      {
+        id: 103,
+        name: 'GCP Infrastructure Design',
+        description: 'Google Cloud Platform infrastructure design and deployment strategies.',
+        coverUrl: '/mock-doc-cover.png',
+        pdfUrl: '#',
+      },
+      {
+        id: 104,
+        name: 'Multi-Cloud Strategy',
+        description: 'Strategies for implementing and managing multi-cloud environments.',
+        coverUrl: '/mock-doc-cover.png',
+        pdfUrl: '#',
+      },
+      {
+        id: 105,
+        name: 'Cloud Security Framework',
+        description: 'Security frameworks and compliance standards for cloud deployments.',
+        coverUrl: '/mock-doc-cover.png',
+        pdfUrl: '#',
+      },
+    ],
+  },
+  {
+    id: 2,
+    name: 'Project Management',
+    documents: [
+      {
+        id: 201,
+        name: 'Agile Methodology Handbook',
+        description: 'Complete handbook for agile project management methodologies.',
+        coverUrl: '/mock-doc-cover.png',
+        pdfUrl: '#',
+      },
+      {
+        id: 202,
+        name: 'Risk Assessment Templates',
+        description: 'Templates and guidelines for project risk assessment and mitigation.',
+        coverUrl: '/mock-doc-cover.png',
+        pdfUrl: '#',
+      },
+      {
+        id: 203,
+        name: 'Stakeholder Communication Plan',
+        description: 'Best practices for stakeholder communication and engagement.',
+        coverUrl: '/mock-doc-cover.png',
+        pdfUrl: '#',
+      },
+    ],
+  },
+  {
+    id: 3,
+    name: 'Compliance & Regulations',
+    documents: [
+      {
+        id: 301,
+        name: 'GDPR Compliance Guide',
+        description: 'Guidelines for ensuring GDPR compliance in data processing activities.',
+        coverUrl: '/mock-doc-cover.png',
+        pdfUrl: '#',
+      },
+      {
+        id: 302,
+        name: 'ISO 27001 Standards',
+        description: 'Information security management system standards and implementation.',
+        coverUrl: '/mock-doc-cover.png',
+        pdfUrl: '#',
+      },
+    ],
+  },
+];
+
+// ===== 使用者資料 =====
+export const currentUser = {
+  name: 'Tina',
+  role: '國際管理員',
+  department: '規劃部 / 規劃部',
+  memberCount: 18,
+  agentCount: 33,
+};
+
+// ===== 使用者列表（用於權限設定）=====
+export const userList = [
+  { id: 1, name: 'Tina', email: 'tina@company.com', department: '規劃部' },
+  { id: 2, name: 'John', email: 'john@company.com', department: '研發部' },
+  { id: 3, name: 'Alice', email: 'alice@company.com', department: '行銷部' },
+  { id: 4, name: 'Bob', email: 'bob@company.com', department: '財務部' },
+  { id: 5, name: 'Carol', email: 'carol@company.com', department: '人資部' },
+  { id: 6, name: 'David', email: 'david@company.com', department: '研發部' },
+  { id: 7, name: 'Eva', email: 'eva@company.com', department: '規劃部' },
+  { id: 8, name: 'Frank', email: 'frank@company.com', department: '行銷部' },
+];

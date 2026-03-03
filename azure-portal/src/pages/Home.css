@@ -1,0 +1,221 @@
+.home-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ===== 通用區塊 ===== */
+.home-section {
+  background: var(--white);
+  border-radius: 8px;
+  padding: 20px 24px;
+  box-shadow: var(--card-shadow);
+  position: relative;
+}
+
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--primary-color);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+}
+
+.section-subtitle {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-light);
+  margin-left: 8px;
+}
+
+/* ===== 公告欄 ===== */
+.announcement-section {
+  overflow: hidden;
+}
+
+.announcement-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #e74c3c;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  transform: rotate(15deg);
+  border-radius: 4px;
+  letter-spacing: 1px;
+}
+
+.announcement-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.announcement-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.announcement-item:hover {
+  background: var(--primary-light);
+}
+
+.announcement-dot {
+  color: var(--text-light);
+  font-size: 18px;
+}
+
+.announcement-new-tag {
+  font-size: 11px;
+}
+
+.announcement-date {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 90px;
+}
+
+.announcement-subject {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+/* ===== 公告 Modal ===== */
+.announcement-modal-content {
+  padding: 8px 0;
+}
+
+.announcement-modal-text {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+}
+
+.announcement-modal-attachment {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.attachment-cover {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.attachment-cover p {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  word-break: break-all;
+}
+
+/* ===== Agent Store 預覽 ===== */
+.agent-preview-list {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.agent-preview-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fafafa;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  flex: 1;
+  min-width: 300px;
+  max-width: 480px;
+}
+
+.agent-preview-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.agent-preview-info {
+  flex: 1;
+}
+
+.agent-preview-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.agent-preview-meta {
+  display: flex;
+  align-items: center;
+}
+
+.agent-model {
+  font-size: 12px;
+  color: var(--text-light);
+}
+
+/* ===== 線上圖書館預覽 ===== */
+.library-preview-grid {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.library-preview-card {
+  width: 200px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.library-preview-card:hover {
+  transform: translateY(-2px);
+}
+
+.library-preview-cover {
+  width: 200px;
+  height: 140px;
+  background: #f0f0f0;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #bbb;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.library-preview-name {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
