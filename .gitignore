@@ -44,3 +44,5 @@ Thumbs.db
 -e 
 # Specific files to ignore
 Azure.md.txt
+-e CTBC portal.txt
+資料庫設計.md
