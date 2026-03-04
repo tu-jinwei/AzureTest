@@ -1,10 +1,22 @@
 import React from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
-import { Spin } from 'antd';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Spin, Result, Button } from 'antd';
 import { useAuth } from '../contexts/AuthContext';
 
-const ProtectedRoute = () => {
-  const { isAuthenticated, loading } = useAuth();
+/**
+ * ProtectedRoute — 路由守衛元件
+ *
+ * 用法 1：僅檢查登入狀態（無 props）
+ *   <Route element={<ProtectedRoute />}>
+ *
+ * 用法 2：同時檢查特定權限
+ *   <Route element={<ProtectedRoute requiredPermission="manage_users" />}>
+ *
+ * 當使用者已登入但缺少所需權限時，顯示 403 頁面並提供返回首頁按鈕。
+ */
+const ProtectedRoute = ({ requiredPermission }) => {
+  const { isAuthenticated, loading, hasPermission } = useAuth();
+  const location = useLocation();
 
   // 載入中，顯示全頁 Spin
   if (loading) {
@@ -28,7 +40,12 @@ const ProtectedRoute = () => {
     return <Navigate to="/login" replace />;
   }
 
-  // 已登入，渲染子路由
+  // 已登入但缺少所需權限 → 導回首頁
+  if (requiredPermission && !hasPermission(requiredPermission)) {
+    return <Navigate to="/" replace />;
+  }
+
+  // 已登入且有權限，渲染子路由
   return <Outlet />;
 };
 

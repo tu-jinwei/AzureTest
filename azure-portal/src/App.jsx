@@ -36,10 +36,21 @@ const App = () => {
                 <Route path="agent-store/chat" element={<AgentChat />} />
                 <Route path="agent-store/history" element={<ChatHistory />} />
                 <Route path="library" element={<Library />} />
-                <Route path="settings/announcements" element={<AnnouncementSettings />} />
-                <Route path="settings/agent-permissions" element={<AgentPermissions />} />
-                <Route path="settings/library" element={<LibrarySettings />} />
-                <Route path="settings/users" element={<UserManagement />} />
+
+                {/* Settings 路由 — 各自需要對應權限 */}
+                <Route element={<ProtectedRoute requiredPermission="manage_announcements" />}>
+                  <Route path="settings/announcements" element={<AnnouncementSettings />} />
+                </Route>
+                <Route element={<ProtectedRoute requiredPermission="manage_agent_permissions" />}>
+                  <Route path="settings/agent-permissions" element={<AgentPermissions />} />
+                </Route>
+                <Route element={<ProtectedRoute requiredPermission="manage_library" />}>
+                  <Route path="settings/library" element={<LibrarySettings />} />
+                </Route>
+                <Route element={<ProtectedRoute requiredPermission="manage_users" />}>
+                  <Route path="settings/users" element={<UserManagement />} />
+                </Route>
+
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Route>
