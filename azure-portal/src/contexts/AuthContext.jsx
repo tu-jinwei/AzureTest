@@ -1,7 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { authAPI, getToken, setToken, removeToken } from '../services/api';
 
 const AuthContext = createContext(null);
+
+// 定期刷新使用者資訊的間隔（毫秒）— 每 60 秒
+const REFRESH_INTERVAL = 60 * 1000;
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -14,26 +17,82 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const refreshTimerRef = useRef(null);
+
+  // 從後端 /api/auth/me 取得最新使用者資訊
+  const fetchUser = useCallback(async () => {
+    const token = getToken();
+    if (!token) return null;
+
+    try {
+      const response = await authAPI.getMe();
+      setUser(response.data);
+      return response.data;
+    } catch (error) {
+      console.error('取得使用者資訊失敗:', error);
+      if (error.response?.status === 401) {
+        removeToken();
+        setUser(null);
+      }
+      return null;
+    }
+  }, []);
+
+  // 手動刷新使用者資訊（供其他元件呼叫）
+  const refreshUser = useCallback(async () => {
+    return await fetchUser();
+  }, [fetchUser]);
 
   // 啟動時自動檢查 localStorage 中的 token
   useEffect(() => {
     const initAuth = async () => {
       const token = getToken();
       if (token) {
-        try {
-          const response = await authAPI.getMe();
-          setUser(response.data);
-        } catch (error) {
-          console.error('Token 驗證失敗:', error);
-          removeToken();
-          setUser(null);
-        }
+        await fetchUser();
       }
       setLoading(false);
     };
 
     initAuth();
-  }, []);
+  }, [fetchUser]);
+
+  // 定期刷新使用者資訊（偵測角色變更等）
+  useEffect(() => {
+    if (!user) {
+      // 未登入時清除定時器
+      if (refreshTimerRef.current) {
+        clearInterval(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+      return;
+    }
+
+    // 已登入時啟動定期刷新
+    refreshTimerRef.current = setInterval(() => {
+      fetchUser();
+    }, REFRESH_INTERVAL);
+
+    return () => {
+      if (refreshTimerRef.current) {
+        clearInterval(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    };
+  }, [user, fetchUser]);
+
+  // 監聽頁面可見性變化 — 切回頁面時立即刷新
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && getToken()) {
+        fetchUser();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchUser]);
 
   // 登入：儲存 token 並設定使用者
   const login = useCallback((token, userData) => {
@@ -70,6 +129,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     hasPermission,
+    refreshUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
