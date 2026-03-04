@@ -1,0 +1,116 @@
+/* Login 頁面 - 全頁居中卡片式佈局 */
+.login-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 50%, #d5dde6 100%);
+  padding: 20px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+  padding: 40px 36px 32px;
+}
+
+/* Logo 區域 */
+.login-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.login-logo {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #2aabb3 0%, #1d8a91 100%);
+  margin-bottom: 16px;
+}
+
+.login-logo-icon {
+  font-size: 32px;
+  color: #fff;
+}
+
+.login-title {
+  margin-bottom: 4px !important;
+  color: #1a1a1a !important;
+  font-weight: 600 !important;
+}
+
+.login-subtitle {
+  color: #888;
+  font-size: 14px;
+}
+
+/* 表單區域 */
+.login-form {
+  margin-bottom: 24px;
+}
+
+.login-field {
+  margin-bottom: 20px;
+}
+
+.login-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.login-btn {
+  margin-top: 8px;
+  height: 44px !important;
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  border-radius: 8px !important;
+}
+
+/* OTP 資訊 */
+.login-otp-info {
+  text-align: center;
+  margin-bottom: 20px;
+  padding: 12px;
+  background: #f6fafb;
+  border-radius: 8px;
+  border: 1px solid #e0f0f1;
+}
+
+/* 操作連結 */
+.login-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.login-resend {
+  font-size: 13px;
+}
+
+.login-back {
+  font-size: 13px;
+}
+
+/* 開發模式提示 */
+.login-dev-hint {
+  text-align: center;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+/* 響應式 */
+@media (max-width: 480px) {
+  .login-card {
+    padding: 32px 24px 24px;
+  }
+}

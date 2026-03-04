@@ -1,17 +1,15 @@
 #!/bin/bash
-# Azure Portal 靜態伺服器啟動腳本
-# 用途：build + serve，供 systemd service 使用
+# Azure Portal 前端建置腳本
+# 用途：build 前端靜態檔案到後端 static/ 目錄
+# FastAPI 會負責 serve 靜態檔案 + API
 
 set -e
 
 PROJECT_DIR="/home/ubuntu/wei/Azure/azure-portal"
-PORT=8079
 
 cd "$PROJECT_DIR"
 
-echo "[$(date)] 開始建置 Azure Portal..."
+echo "[$(date)] 開始建置 Azure Portal 前端..."
 /usr/bin/npx vite build 2>&1
-echo "[$(date)] 建置完成，啟動靜態伺服器 (port $PORT)..."
-
-# 使用 exec 替換 shell 程序，讓 systemd 能正確管理 node 程序
-exec /usr/bin/npx serve dist -l "$PORT" --single 2>&1
+echo "[$(date)] 建置完成！靜態檔案已輸出到 ../backend/static/"
+echo "[$(date)] FastAPI (port 8079) 會自動 serve 前端靜態檔案"

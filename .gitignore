@@ -5,6 +5,7 @@ node_modules/
 dist/
 dist-ssr/
 build/
+backend/static/
 
 # Logs
 logs/
@@ -44,5 +45,6 @@ Thumbs.db
 -e 
 # Specific files to ignore
 Azure.md.txt
--e CTBC portal.txt
+-e 
+CTBC portal.txt
 資料庫設計.md

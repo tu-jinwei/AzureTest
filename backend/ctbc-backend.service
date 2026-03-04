@@ -1,0 +1,29 @@
+[Unit]
+Description=CTBC AI Portal Backend (FastAPI, port 8180)
+After=network.target
+
+[Service]
+Type=exec
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/wei/Azure/backend
+ExecStart=/home/ubuntu/wei/Azure/backend/start.sh
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ctbc-backend
+
+# 環境變數路徑
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# 安全性強化
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/ubuntu/wei/Azure/backend
+
+# 資源限制
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

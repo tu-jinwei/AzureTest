@@ -1,3 +1,58 @@
+// ===== 角色定義 =====
+export const ROLES = {
+  SUPER_ADMIN: 'super_admin',
+  PLATFORM_ADMIN: 'platform_admin',
+  USER_MANAGER: 'user_manager',
+  LIBRARY_MANAGER: 'library_manager',
+  USER: 'user',
+};
+
+export const ROLE_LABELS = {
+  [ROLES.SUPER_ADMIN]: '台灣最高管理者',
+  [ROLES.PLATFORM_ADMIN]: '平台管理者',
+  [ROLES.USER_MANAGER]: '用戶管理者',
+  [ROLES.LIBRARY_MANAGER]: '圖書館管理者',
+  [ROLES.USER]: '一般使用者',
+};
+
+export const ROLE_COLORS = {
+  [ROLES.SUPER_ADMIN]: '#FFD700',
+  [ROLES.PLATFORM_ADMIN]: '#FF6B6B',
+  [ROLES.USER_MANAGER]: '#4ECDC4',
+  [ROLES.LIBRARY_MANAGER]: '#45B7D1',
+  [ROLES.USER]: '#95E1D3',
+};
+
+// 角色權限定義
+export const ROLE_PERMISSIONS = {
+  [ROLES.SUPER_ADMIN]: [
+    'view_announcements', 'use_agents', 'view_library', 'chat_history',
+    'manage_users', 'manage_library', 'manage_announcements', 'manage_agent_permissions',
+    'access_all_agents', 'access_all_docs', 'cross_country_logs',
+  ],
+  [ROLES.PLATFORM_ADMIN]: [
+    'view_announcements', 'use_agents', 'view_library', 'chat_history',
+    'manage_users', 'manage_library', 'manage_announcements', 'manage_agent_permissions',
+    'access_all_agents', 'access_all_docs',
+  ],
+  [ROLES.USER_MANAGER]: [
+    'view_announcements', 'use_agents', 'view_library', 'chat_history',
+    'manage_users',
+  ],
+  [ROLES.LIBRARY_MANAGER]: [
+    'view_announcements', 'use_agents', 'view_library', 'chat_history',
+    'manage_library',
+  ],
+  [ROLES.USER]: [
+    'view_announcements', 'use_agents', 'view_library', 'chat_history',
+  ],
+};
+
+// 檢查角色是否有特定權限
+export const hasPermission = (role, permission) => {
+  return ROLE_PERMISSIONS[role]?.includes(permission) || false;
+};
+
 // ===== 公告資料 =====
 export const announcements = [
   {
@@ -240,23 +295,36 @@ export const libraries = [
   },
 ];
 
+// ===== 國家列表 =====
+export const countries = [
+  { code: 'TW', name: '台灣' },
+  { code: 'JP', name: '日本' },
+  { code: 'SG', name: '新加坡' },
+  { code: 'TH', name: '泰國' },
+  { code: 'VN', name: '越南' },
+  { code: 'PH', name: '菲律賓' },
+];
+
 // ===== 使用者資料 =====
 export const currentUser = {
+  id: 1,
   name: 'Tina',
-  role: '國際管理員',
+  email: 'tina@ctbc.com',
+  role: ROLES.PLATFORM_ADMIN,
   department: '規劃部 / 規劃部',
+  country: 'TW',
   memberCount: 18,
   agentCount: 33,
 };
 
 // ===== 使用者列表（用於權限設定）=====
 export const userList = [
-  { id: 1, name: 'Tina', email: 'tina@company.com', department: '規劃部' },
-  { id: 2, name: 'John', email: 'john@company.com', department: '研發部' },
-  { id: 3, name: 'Alice', email: 'alice@company.com', department: '行銷部' },
-  { id: 4, name: 'Bob', email: 'bob@company.com', department: '財務部' },
-  { id: 5, name: 'Carol', email: 'carol@company.com', department: '人資部' },
-  { id: 6, name: 'David', email: 'david@company.com', department: '研發部' },
-  { id: 7, name: 'Eva', email: 'eva@company.com', department: '規劃部' },
-  { id: 8, name: 'Frank', email: 'frank@company.com', department: '行銷部' },
+  { id: 1, name: 'Tina', email: 'tina@ctbc.com', department: '規劃部', role: ROLES.PLATFORM_ADMIN, country: 'TW', status: 'active' },
+  { id: 2, name: 'John', email: 'john@ctbc.com', department: '研發部', role: ROLES.USER_MANAGER, country: 'TW', status: 'active' },
+  { id: 3, name: 'Alice', email: 'alice@ctbc.com', department: '行銷部', role: ROLES.LIBRARY_MANAGER, country: 'TW', status: 'active' },
+  { id: 4, name: 'Bob', email: 'bob@ctbc.com.sg', department: '財務部', role: ROLES.USER, country: 'SG', status: 'active' },
+  { id: 5, name: 'Carol', email: 'carol@ctbc.com', department: '人資部', role: ROLES.USER, country: 'TW', status: 'active' },
+  { id: 6, name: 'David', email: 'david@ctbc.co.jp', department: '研發部', role: ROLES.USER, country: 'JP', status: 'active' },
+  { id: 7, name: 'Eva', email: 'eva@ctbc.com', department: '規劃部', role: ROLES.USER, country: 'TW', status: 'inactive' },
+  { id: 8, name: 'Frank', email: 'frank@ctbc.co.th', department: '行銷部', role: ROLES.USER, country: 'TH', status: 'active' },
 ];

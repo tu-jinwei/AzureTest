@@ -1,0 +1,60 @@
+"""
+Local DB Models（各國 PostgreSQL）
+"""
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+
+from core.local_database import LocalBase
+
+
+class OTPVault(LocalBase):
+    """OTP 保險庫"""
+    __tablename__ = "otp_vault"
+
+    email = Column(String(255), primary_key=True)
+    otp_hash = Column(String(255), nullable=False)
+    expiry_time = Column(DateTime(timezone=True), nullable=False)
+    retries = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class LoginAudit(LocalBase):
+    """登入稽核"""
+    __tablename__ = "login_audit"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), nullable=False)
+    status = Column(String(20), nullable=False)  # success / failed / locked
+    ip_address = Column(String(45))
+    user_agent = Column(Text)
+    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class LocalNotice(LocalBase):
+    """本地公告"""
+    __tablename__ = "local_notice"
+
+    notice_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    subject = Column(String(255), nullable=False)
+    content_en = Column(Text)
+    files = Column(JSONB, default=[])
+    publish_status = Column(String(20), default="draft")  # draft / published
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class FileLifecycle(LocalBase):
+    """檔案生命週期"""
+    __tablename__ = "file_lifecycle"
+
+    file_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), nullable=False)
+    original_name = Column(String(500), nullable=False)
+    blob_path = Column(Text)
+    status = Column(String(20), nullable=False, default="processing")  # processing / deleted
+    deleted_at = Column(DateTime(timezone=True))
+    audit = Column(JSONB, default={})
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
