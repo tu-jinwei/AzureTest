@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Modal, Button, Tag } from 'antd';
+import { Modal, Button, Tag, Spin } from 'antd';
 import {
   SoundOutlined,
   RobotOutlined,
@@ -8,12 +8,64 @@ import {
   FilePdfOutlined,
   LinkOutlined,
 } from '@ant-design/icons';
-import { announcements, agents, libraries } from '../data/mockData';
+import { announcementAPI, agentAPI, libraryAPI } from '../services/api';
+import { adaptAnnouncements, adaptAgents, adaptLibraryDocs } from '../utils/adapters';
+import { announcements as mockAnnouncements, agents as mockAgents, libraries as mockLibraries } from '../data/mockData';
 import './Home.css';
 
 const Home = () => {
   const navigate = useNavigate();
   const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
+
+  const [announcements, setAnnouncements] = useState([]);
+  const [agents, setAgents] = useState([]);
+  const [libraries, setLibraries] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+
+      // 公告
+      try {
+        const res = await announcementAPI.list();
+        setAnnouncements(adaptAnnouncements(res.data));
+      } catch (err) {
+        console.warn('公告 API 失敗，使用 mock 資料', err);
+        setAnnouncements(mockAnnouncements);
+      }
+
+      // Agent
+      try {
+        const res = await agentAPI.list();
+        setAgents(adaptAgents(res.data));
+      } catch (err) {
+        console.warn('Agent API 失敗，使用 mock 資料', err);
+        setAgents(mockAgents);
+      }
+
+      // 圖書館
+      try {
+        const res = await libraryAPI.list();
+        setLibraries(adaptLibraryDocs(res.data));
+      } catch (err) {
+        console.warn('圖書館 API 失敗，使用 mock 資料', err);
+        setLibraries(mockLibraries);
+      }
+
+      setLoading(false);
+    };
+
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="home-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+        <Spin size="large" tip="載入中..." />
+      </div>
+    );
+  }
 
   return (
     <div className="home-page">

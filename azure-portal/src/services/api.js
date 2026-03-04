@@ -120,9 +120,10 @@ export const libraryAPI = {
   listAll: () =>
     api.get('/library/all'),
 
-  upload: (formData) =>
+  upload: (formData, config = {}) =>
     api.post('/library/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      ...config,
     }),
 
   delete: (docId) =>

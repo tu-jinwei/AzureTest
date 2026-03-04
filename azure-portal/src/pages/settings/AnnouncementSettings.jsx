@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Button,
   Table,
@@ -6,7 +6,7 @@ import {
   Form,
   Input,
   Upload,
-  Switch,
+  Select,
   Tag,
   Popconfirm,
   message,
@@ -20,21 +20,42 @@ import {
   NotificationOutlined,
   SearchOutlined,
 } from '@ant-design/icons';
-import { announcements as initialAnnouncements } from '../../data/mockData';
+import { announcementAPI } from '../../services/api';
+import { adaptAnnouncements, toAnnouncementCreate, toAnnouncementUpdate } from '../../utils/adapters';
+import { announcements as mockAnnouncements } from '../../data/mockData';
 import '../Settings.css';
 
 const { TextArea } = Input;
 
 const AnnouncementSettings = () => {
-  const [data, setData] = useState(initialAnnouncements);
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [form] = Form.useForm();
 
+  const fetchAnnouncements = async () => {
+    setLoading(true);
+    try {
+      const res = await announcementAPI.listAll();
+      setData(adaptAnnouncements(res.data));
+    } catch (err) {
+      console.warn('公告 API 失敗，使用 mock 資料', err);
+      setData(mockAnnouncements);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAnnouncements();
+  }, []);
+
   const handleAdd = () => {
     setEditingItem(null);
     form.resetFields();
+    form.setFieldsValue({ publish_status: 'published' });
     setModalOpen(true);
   };
 
@@ -43,40 +64,47 @@ const AnnouncementSettings = () => {
     form.setFieldsValue({
       subject: record.subject,
       content: record.content,
-      isNew: record.isNew,
+      publish_status: record.publish_status || 'draft',
     });
     setModalOpen(true);
   };
 
-  const handleDelete = (id) => {
-    setData((prev) => prev.filter((item) => item.id !== id));
-    message.success('公告已刪除');
+  const handleDelete = async (id) => {
+    try {
+      await announcementAPI.delete(id);
+      message.success('公告已刪除');
+      fetchAnnouncements();
+    } catch (err) {
+      console.error('刪除公告失敗', err);
+      message.error('刪除失敗：' + (err.response?.data?.detail || err.message));
+    }
   };
 
-  const handleSave = () => {
-    form.validateFields().then((values) => {
+  const handleSave = async () => {
+    try {
+      const values = await form.validateFields();
+      // 將表單值轉換為 adapter 所需的格式
+      const adapterData = {
+        subject: values.subject,
+        content: values.content,
+        publishStatus: values.publish_status,
+      };
+
       if (editingItem) {
-        setData((prev) =>
-          prev.map((item) =>
-            item.id === editingItem.id
-              ? { ...item, ...values, date: item.date }
-              : item
-          )
-        );
+        await announcementAPI.update(editingItem.id, toAnnouncementUpdate(adapterData));
         message.success('公告已更新');
       } else {
-        const newItem = {
-          id: Date.now(),
-          ...values,
-          date: new Date().toISOString().slice(0, 10).replace(/-/g, '.'),
-          attachment: null,
-        };
-        setData((prev) => [newItem, ...prev]);
+        await announcementAPI.create(toAnnouncementCreate(adapterData));
         message.success('公告已新增');
       }
       setModalOpen(false);
       form.resetFields();
-    });
+      fetchAnnouncements();
+    } catch (err) {
+      if (err.errorFields) return; // form validation error
+      console.error('儲存公告失敗', err);
+      message.error('儲存失敗：' + (err.response?.data?.detail || err.message));
+    }
   };
 
   const filteredData = data.filter(
@@ -100,11 +128,15 @@ const AnnouncementSettings = () => {
     },
     {
       title: '狀態',
-      dataIndex: 'isNew',
-      key: 'isNew',
+      dataIndex: 'publish_status',
+      key: 'publish_status',
       width: 100,
-      render: (isNew) =>
-        isNew ? <Tag color="green">已發布</Tag> : <Tag>未發布</Tag>,
+      render: (status) =>
+        status === 'published' ? (
+          <Tag color="green">已發布</Tag>
+        ) : (
+          <Tag>草稿</Tag>
+        ),
     },
     {
       title: '附件',
@@ -174,6 +206,7 @@ const AnnouncementSettings = () => {
           columns={columns}
           dataSource={filteredData}
           rowKey="id"
+          loading={loading}
           pagination={{ pageSize: 10 }}
           locale={{ emptyText: '尚無公告' }}
         />
@@ -203,8 +236,11 @@ const AnnouncementSettings = () => {
           >
             <TextArea rows={4} placeholder="Enter announcement content..." maxLength={300} showCount />
           </Form.Item>
-          <Form.Item name="isNew" label="發布狀態" valuePropName="checked">
-            <Switch checkedChildren="已發布" unCheckedChildren="未發布" />
+          <Form.Item name="publish_status" label="發布狀態" initialValue="published">
+            <Select>
+              <Select.Option value="published">已發布</Select.Option>
+              <Select.Option value="draft">草稿</Select.Option>
+            </Select>
           </Form.Item>
           <Form.Item label="附件檔案（PDF）">
             <Upload maxCount={1} accept=".pdf" beforeUpload={() => false}>

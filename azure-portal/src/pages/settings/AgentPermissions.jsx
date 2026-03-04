@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Table,
   Tag,
@@ -9,31 +9,70 @@ import {
   message,
   Space,
   Badge,
+  Spin,
 } from 'antd';
 import {
   SafetyOutlined,
   UserAddOutlined,
   CheckCircleOutlined,
 } from '@ant-design/icons';
-import { agents, userList } from '../../data/mockData';
+import { agentAPI } from '../../services/api';
+import { adaptAgents } from '../../utils/adapters';
+import { agents as mockAgents, userList } from '../../data/mockData';
 import '../Settings.css';
 
 const AgentPermissions = () => {
-  const [agentData, setAgentData] = useState(
-    agents.map((a) => ({
-      ...a,
-      published: true,
-      assignedUsers: [1, 2], // 預設指派給前兩位使用者
-    }))
-  );
+  const [agentData, setAgentData] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [transferModal, setTransferModal] = useState(null);
   const [targetKeys, setTargetKeys] = useState([]);
 
-  const handlePublishToggle = (agentId, checked) => {
-    setAgentData((prev) =>
-      prev.map((a) => (a.id === agentId ? { ...a, published: checked } : a))
-    );
-    message.success(checked ? 'Agent 已上架' : 'Agent 已下架');
+  const fetchAgents = async () => {
+    setLoading(true);
+    try {
+      const res = await agentAPI.listAll();
+      const adapted = adaptAgents(res.data).map((a) => ({
+        ...a,
+        published: a.status === '可用',
+        assignedUsers: a.assignedUsers || [1, 2], // 預設指派給前兩位使用者
+      }));
+      setAgentData(adapted);
+    } catch (err) {
+      console.warn('Agent API 失敗，使用 mock 資料', err);
+      setAgentData(
+        mockAgents.map((a) => ({
+          ...a,
+          published: true,
+          assignedUsers: [1, 2],
+        }))
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAgents();
+  }, []);
+
+  const handlePublishToggle = async (agentId, checked) => {
+    try {
+      await agentAPI.updatePublish(agentId, checked);
+      message.success(checked ? 'Agent 已上架' : 'Agent 已下架');
+      fetchAgents();
+    } catch (err) {
+      message.error('操作失敗：' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleACLUpdate = async (agentId, aclData) => {
+    try {
+      await agentAPI.updateACL(agentId, aclData);
+      message.success('Agent 授權規則已更新');
+      fetchAgents();
+    } catch (err) {
+      message.error('更新失敗：' + (err.response?.data?.detail || err.message));
+    }
   };
 
   const openAssignModal = (agent) => {
@@ -143,6 +182,7 @@ const AgentPermissions = () => {
           dataSource={agentData}
           rowKey="id"
           pagination={false}
+          loading={loading}
           locale={{ emptyText: '尚無 Agent' }}
         />
       </div>

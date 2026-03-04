@@ -1,0 +1,377 @@
+/**
+ * adapters.js — 後端 API 回應 ↔ 前端元件格式轉換工具
+ *
+ * 後端 schema 定義於 Azure/backend/models/schemas.py
+ * 前端 mockData 定義於 Azure/azure-portal/src/data/mockData.js
+ */
+
+// ============================================================
+// 工具函式
+// ============================================================
+
+/**
+ * 將 ISO 8601 日期字串轉換為 "YYYY.MM.DD" 格式
+ * @param {string} isoString - ISO 8601 格式的日期字串
+ * @returns {string} "YYYY.MM.DD" 格式的日期字串，無效輸入回傳空字串
+ */
+export function formatDate(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}.${mm}.${dd}`;
+}
+
+/**
+ * 判斷日期是否在最近 N 天內
+ * @param {string} isoString - ISO 8601 格式的日期字串
+ * @param {number} days - 天數閾值
+ * @returns {boolean} 若日期在 N 天內回傳 true，否則回傳 false
+ */
+export function isWithinDays(isoString, days = 7) {
+  if (!isoString) return false;
+  const target = new Date(isoString);
+  if (Number.isNaN(target.getTime())) return false;
+  const now = new Date();
+  const diffMs = now.getTime() - target.getTime();
+  return diffMs >= 0 && diffMs <= days * 24 * 60 * 60 * 1000;
+}
+
+// ============================================================
+// 公告 (Announcement)  —  後端 → 前端
+// ============================================================
+
+/**
+ * 單筆公告：後端 AnnouncementResponse → 前端 announcement 物件
+ *
+ * 後端欄位 (schemas.AnnouncementResponse):
+ *   notice_id, subject, content_en, files, publish_status, created_at, updated_at
+ *
+ * 前端欄位 (mockData.announcements[]):
+ *   id, subject, content, date, isNew, attachment
+ *
+ * @param {object} apiData - 後端 API 回傳的公告物件
+ * @returns {object} 前端格式的公告物件
+ */
+export function adaptAnnouncement(apiData) {
+  if (!apiData) return null;
+
+  // attachment：從 files JSONB 陣列取第一個檔案
+  let attachment = null;
+  if (Array.isArray(apiData.files) && apiData.files.length > 0) {
+    const file = apiData.files[0];
+    attachment = {
+      name: file.name || file.original_name || '',
+      coverUrl: file.cover_url || file.coverUrl || '',
+      pdfUrl: file.file_url || file.pdfUrl || '#',
+    };
+  }
+
+  return {
+    id: apiData.notice_id,
+    subject: apiData.subject ?? '',
+    content: apiData.content_en ?? '',
+    date: formatDate(apiData.created_at),
+    isNew: isWithinDays(apiData.created_at, 7),
+    publish_status: apiData.publish_status ?? 'draft',
+    attachment,
+  };
+}
+
+/**
+ * 多筆公告轉換
+ * @param {Array} apiDataList - 後端公告陣列
+ * @returns {Array} 前端格式的公告陣列
+ */
+export function adaptAnnouncements(apiDataList) {
+  if (!Array.isArray(apiDataList)) return [];
+  return apiDataList.map(adaptAnnouncement).filter(Boolean);
+}
+
+// ============================================================
+// Agent  —  後端 → 前端
+// ============================================================
+
+/**
+ * 單筆 Agent：後端 AgentResponse → 前端 agent 物件
+ *
+ * 後端欄位 (schemas.AgentResponse):
+ *   agent_id, name, agent_config_json, icon, color, description, is_published
+ *
+ * 前端欄位 (mockData.agents[]):
+ *   id, name, model, status, icon, color, description
+ *
+ * @param {object} apiData - 後端 API 回傳的 Agent 物件
+ * @returns {object} 前端格式的 Agent 物件
+ */
+export function adaptAgent(apiData) {
+  if (!apiData) return null;
+
+  const configJson = apiData.agent_config_json || {};
+
+  return {
+    id: apiData.agent_id,
+    name: apiData.name ?? '',
+    model: configJson.model || 'unknown',
+    status: apiData.is_published ? '可用' : '不可用',
+    icon: apiData.icon ?? '',
+    color: apiData.color ?? '',
+    description: apiData.description ?? '',
+  };
+}
+
+/**
+ * 多筆 Agent 轉換
+ * @param {Array} apiDataList - 後端 Agent 陣列
+ * @returns {Array} 前端格式的 Agent 陣列
+ */
+export function adaptAgents(apiDataList) {
+  if (!Array.isArray(apiDataList)) return [];
+  return apiDataList.map(adaptAgent).filter(Boolean);
+}
+
+// ============================================================
+// 圖書館文件 (Library Document)  —  後端 → 前端
+// ============================================================
+
+/**
+ * 單筆文件：後端 LibraryDocResponse → 前端 document 物件
+ *
+ * 後端欄位 (schemas.LibraryDocResponse):
+ *   doc_id, library_name, name, description, file_url, auth_rules, created_at
+ *
+ * 前端欄位 (mockData.libraries[].documents[]):
+ *   id, name, description, coverUrl, pdfUrl
+ *
+ * @param {object} apiData - 後端 API 回傳的文件物件
+ * @returns {object} 前端格式的文件物件（含 _libraryName 供分組用）
+ */
+export function adaptLibraryDoc(apiData) {
+  if (!apiData) return null;
+
+  return {
+    id: apiData.doc_id,
+    name: apiData.name ?? '',
+    description: apiData.description ?? '',
+    coverUrl: '/mock-doc-cover.png', // 後端無封面，使用前端預設圖
+    pdfUrl: apiData.file_url || '#',
+    _libraryName: apiData.library_name ?? '', // 內部欄位，供 adaptLibraryDocs 分組用
+  };
+}
+
+/**
+ * 多筆文件轉換，並按 library_name 分組成前端格式
+ *
+ * 後端回傳扁平列表，前端需要按分類分組：
+ *   [{ id, name, documents: [...] }, ...]
+ *
+ * @param {Array} apiDataList - 後端文件扁平陣列
+ * @returns {Array} 前端格式的圖書館分組陣列
+ */
+export function adaptLibraryDocs(apiDataList) {
+  if (!Array.isArray(apiDataList)) return [];
+
+  const groupMap = new Map();
+
+  apiDataList.forEach((item) => {
+    const doc = adaptLibraryDoc(item);
+    if (!doc) return;
+
+    const libName = doc._libraryName;
+    if (!groupMap.has(libName)) {
+      groupMap.set(libName, {
+        id: groupMap.size + 1,
+        name: libName,
+        documents: [],
+      });
+    }
+
+    // 移除內部欄位後加入 documents
+    const { _libraryName, ...cleanDoc } = doc;
+    groupMap.get(libName).documents.push(cleanDoc);
+  });
+
+  return Array.from(groupMap.values());
+}
+
+// ============================================================
+// 使用者 (User)  —  後端 → 前端
+// ============================================================
+
+/**
+ * 單筆使用者：後端 UserListResponse → 前端 user 物件
+ *
+ * 後端欄位 (schemas.UserListResponse):
+ *   email (PK), name, department, country, role, status, last_login_at, created_at
+ *
+ * 前端欄位 (mockData.userList[]):
+ *   id, name, email, department, role, country, status
+ *
+ * @param {object} apiData - 後端 API 回傳的使用者物件
+ * @returns {object} 前端格式的使用者物件
+ */
+export function adaptUser(apiData) {
+  if (!apiData) return null;
+
+  return {
+    id: apiData.email, // 後端以 email 作為 PK
+    name: apiData.name ?? '',
+    email: apiData.email ?? '',
+    department: apiData.department ?? '',
+    role: apiData.role ?? '',
+    country: apiData.country ?? '',
+    status: apiData.status ?? 'active',
+  };
+}
+
+/**
+ * 多筆使用者轉換
+ * @param {Array} apiDataList - 後端使用者陣列
+ * @returns {Array} 前端格式的使用者陣列
+ */
+export function adaptUsers(apiDataList) {
+  if (!Array.isArray(apiDataList)) return [];
+  return apiDataList.map(adaptUser).filter(Boolean);
+}
+
+// ============================================================
+// 聊天歷史 (Chat History)  —  後端 → 前端
+// ============================================================
+
+/**
+ * 單筆聊天歷史：後端 ChatHistoryItem / ChatResponse → 前端 chatHistory 物件
+ *
+ * 後端欄位 (schemas.ChatHistoryItem):
+ *   chat_id, agent_id, agent_name, last_message, timestamp
+ * 後端欄位 (schemas.ChatResponse):
+ *   chat_id, agent_id, agent_name, messages, created_at, updated_at
+ *
+ * 前端欄位 (mockData.chatHistory[]):
+ *   id, agentId, agentName, lastMessage, timestamp, messages
+ *
+ * @param {object} apiData - 後端 API 回傳的聊天歷史物件
+ * @returns {object} 前端格式的聊天歷史物件
+ */
+export function adaptChatHistoryItem(apiData) {
+  if (!apiData) return null;
+
+  return {
+    id: apiData.chat_id,
+    agentId: apiData.agent_id,
+    agentName: apiData.agent_name ?? '',
+    lastMessage: apiData.last_message ?? '',
+    timestamp: apiData.updated_at || apiData.timestamp || '',
+    messages: Array.isArray(apiData.messages) ? apiData.messages : [],
+  };
+}
+
+/**
+ * 多筆聊天歷史轉換
+ * @param {Array} apiDataList - 後端聊天歷史陣列
+ * @returns {Array} 前端格式的聊天歷史陣列
+ */
+export function adaptChatHistory(apiDataList) {
+  if (!Array.isArray(apiDataList)) return [];
+  return apiDataList.map(adaptChatHistoryItem).filter(Boolean);
+}
+
+// ============================================================
+// 反向轉換：前端 → 後端
+// ============================================================
+
+/**
+ * 前端公告表單 → 後端 AnnouncementCreate 格式
+ *
+ * 後端 schema (schemas.AnnouncementCreate):
+ *   subject, content_en, publish_status, files
+ *
+ * @param {object} frontendData - 前端表單資料
+ * @returns {object} 後端 create API 所需格式
+ */
+export function toAnnouncementCreate(frontendData) {
+  if (!frontendData) return null;
+
+  const files = [];
+  if (frontendData.attachment) {
+    files.push({
+      name: frontendData.attachment.name || '',
+      cover_url: frontendData.attachment.coverUrl || '',
+      file_url: frontendData.attachment.pdfUrl || '',
+    });
+  }
+
+  return {
+    subject: frontendData.subject ?? '',
+    content_en: frontendData.content ?? '',
+    publish_status: frontendData.publishStatus || 'draft',
+    files,
+  };
+}
+
+/**
+ * 前端公告表單 → 後端 AnnouncementUpdate 格式
+ *
+ * 後端 schema (schemas.AnnouncementUpdate):
+ *   subject?, content_en?, publish_status?, files?
+ *
+ * 只包含有值的欄位，避免覆蓋未修改的資料
+ *
+ * @param {object} frontendData - 前端表單資料
+ * @returns {object} 後端 update API 所需格式
+ */
+export function toAnnouncementUpdate(frontendData) {
+  if (!frontendData) return null;
+
+  const payload = {};
+
+  if (frontendData.subject !== undefined) {
+    payload.subject = frontendData.subject;
+  }
+
+  if (frontendData.content !== undefined) {
+    payload.content_en = frontendData.content;
+  }
+
+  if (frontendData.publishStatus !== undefined) {
+    payload.publish_status = frontendData.publishStatus;
+  }
+
+  if (frontendData.attachment !== undefined) {
+    if (frontendData.attachment === null) {
+      payload.files = [];
+    } else {
+      payload.files = [
+        {
+          name: frontendData.attachment.name || '',
+          cover_url: frontendData.attachment.coverUrl || '',
+          file_url: frontendData.attachment.pdfUrl || '',
+        },
+      ];
+    }
+  }
+
+  return payload;
+}
+
+/**
+ * 前端使用者表單 → 後端 UserCreate 格式
+ *
+ * 後端 schema (schemas.UserCreate):
+ *   email, name, department?, country, role?
+ *
+ * @param {object} frontendData - 前端表單資料
+ * @returns {object} 後端 create API 所需格式
+ */
+export function toUserCreate(frontendData) {
+  if (!frontendData) return null;
+
+  return {
+    email: frontendData.email ?? '',
+    name: frontendData.name ?? '',
+    department: frontendData.department || null,
+    country: frontendData.country ?? '',
+    role: frontendData.role || 'user',
+  };
+}

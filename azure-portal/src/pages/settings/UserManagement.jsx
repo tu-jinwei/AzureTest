@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Table,
   Button,
@@ -21,8 +21,10 @@ import {
   TeamOutlined,
   SearchOutlined,
 } from '@ant-design/icons';
+import { userAPI } from '../../services/api';
+import { adaptUsers, toUserCreate } from '../../utils/adapters';
 import {
-  userList as initialUserList,
+  userList as mockUserList,
   ROLES,
   ROLE_LABELS,
   ROLE_COLORS,
@@ -31,7 +33,8 @@ import {
 import '../Settings.css';
 
 const UserManagement = () => {
-  const [users, setUsers] = useState(initialUserList);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [searchText, setSearchText] = useState('');
@@ -39,6 +42,53 @@ const UserManagement = () => {
   const [filterCountry, setFilterCountry] = useState(null);
   const [form] = Form.useForm();
 
+  // ===== 資料載入 =====
+  const fetchUsers = useCallback(async (filters = {}) => {
+    setLoading(true);
+    try {
+      const res = await userAPI.list(filters);
+      setUsers(adaptUsers(res.data));
+    } catch (err) {
+      console.warn('使用者 API 失敗，使用 mock 資料', err);
+      setUsers(mockUserList);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  // ===== 搜尋/篩選 =====
+  const handleSearch = (value) => {
+    setSearchText(value);
+    fetchUsers({
+      search: value || undefined,
+      role: filterRole || undefined,
+      country: filterCountry || undefined,
+    });
+  };
+
+  const handleFilterRole = (role) => {
+    setFilterRole(role);
+    fetchUsers({
+      search: searchText || undefined,
+      role: role || undefined,
+      country: filterCountry || undefined,
+    });
+  };
+
+  const handleFilterCountry = (country) => {
+    setFilterCountry(country);
+    fetchUsers({
+      search: searchText || undefined,
+      role: filterRole || undefined,
+      country: country || undefined,
+    });
+  };
+
+  // ===== 新增使用者 =====
   const handleAdd = () => {
     setEditingUser(null);
     form.resetFields();
@@ -46,6 +96,7 @@ const UserManagement = () => {
     setModalOpen(true);
   };
 
+  // ===== 編輯使用者 =====
   const handleEdit = (record) => {
     setEditingUser(record);
     form.setFieldsValue({
@@ -58,44 +109,81 @@ const UserManagement = () => {
     setModalOpen(true);
   };
 
+  // ===== 儲存（新增 / 更新）=====
   const handleSave = () => {
-    form.validateFields().then((values) => {
+    form.validateFields().then(async (values) => {
       if (editingUser) {
-        setUsers((prev) =>
-          prev.map((u) =>
-            u.id === editingUser.id ? { ...u, ...values } : u
-          )
-        );
-        message.success('使用者資料已更新');
+        // 編輯模式 → 呼叫 update API
+        try {
+          await userAPI.update(editingUser.email, {
+            name: values.name,
+            department: values.department,
+            role: values.role,
+          });
+          message.success('使用者資料已更新');
+          fetchUsers({
+            search: searchText || undefined,
+            role: filterRole || undefined,
+            country: filterCountry || undefined,
+          });
+        } catch (err) {
+          message.error('更新失敗：' + (err.response?.data?.detail || err.message));
+        }
       } else {
-        const newUser = {
-          id: Date.now(),
-          ...values,
-          status: 'active',
-        };
-        setUsers((prev) => [...prev, newUser]);
-        message.success('使用者已新增');
+        // 新增模式 → 呼叫 create API
+        try {
+          await userAPI.create(toUserCreate(values));
+          message.success('使用者已建立');
+          fetchUsers({
+            search: searchText || undefined,
+            role: filterRole || undefined,
+            country: filterCountry || undefined,
+          });
+        } catch (err) {
+          if (err.response?.status === 409) {
+            message.error('此 Email 已存在');
+          } else {
+            message.error('建立失敗：' + (err.response?.data?.detail || err.message));
+          }
+        }
       }
       setModalOpen(false);
       form.resetFields();
     });
   };
 
-  const handleToggleStatus = (userId, currentStatus) => {
+  // ===== 停用/啟用 =====
+  const handleToggleStatus = async (email, currentStatus) => {
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-    setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, status: newStatus } : u))
-    );
-    message.success(newStatus === 'active' ? '帳號已啟用' : '帳號已停用');
+    try {
+      await userAPI.updateStatus(email, newStatus);
+      message.success(newStatus === 'active' ? '帳號已啟用' : '帳號已停用');
+      fetchUsers({
+        search: searchText || undefined,
+        role: filterRole || undefined,
+        country: filterCountry || undefined,
+      });
+    } catch (err) {
+      message.error('操作失敗：' + (err.response?.data?.detail || err.message));
+    }
   };
 
-  const handleRoleChange = (userId, newRole) => {
-    setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
-    );
-    message.success('角色已更新');
+  // ===== 角色變更 =====
+  const handleRoleChange = async (email, newRole) => {
+    try {
+      await userAPI.updateRole(email, newRole);
+      message.success('角色已更新');
+      fetchUsers({
+        search: searchText || undefined,
+        role: filterRole || undefined,
+        country: filterCountry || undefined,
+      });
+    } catch (err) {
+      message.error('角色更新失敗：' + (err.response?.data?.detail || err.message));
+    }
   };
 
+  // ===== 前端篩選（作為 API 篩選的補充）=====
   const filteredUsers = users.filter((u) => {
     const matchSearch =
       !searchText ||
@@ -172,7 +260,7 @@ const UserManagement = () => {
           value={role}
           size="small"
           style={{ width: 140 }}
-          onChange={(val) => handleRoleChange(record.id, val)}
+          onChange={(val) => handleRoleChange(record.email, val)}
           options={roleOptions}
           popupMatchSelectWidth={false}
         />
@@ -210,7 +298,7 @@ const UserManagement = () => {
                 ? '確定要停用此帳號嗎？'
                 : '確定要啟用此帳號嗎？'
             }
-            onConfirm={() => handleToggleStatus(record.id, record.status)}
+            onConfirm={() => handleToggleStatus(record.email, record.status)}
             okText="確定"
             cancelText="取消"
           >
@@ -245,7 +333,7 @@ const UserManagement = () => {
             placeholder="搜尋使用者..."
             prefix={<SearchOutlined />}
             value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
+            onChange={(e) => handleSearch(e.target.value)}
             style={{ width: 180 }}
             allowClear
           />
@@ -253,7 +341,7 @@ const UserManagement = () => {
             placeholder="篩選角色"
             style={{ width: 150 }}
             value={filterRole}
-            onChange={setFilterRole}
+            onChange={handleFilterRole}
             allowClear
             options={roleOptions}
           />
@@ -261,7 +349,7 @@ const UserManagement = () => {
             placeholder="篩選國家"
             style={{ width: 120 }}
             value={filterCountry}
-            onChange={setFilterCountry}
+            onChange={handleFilterCountry}
             allowClear
             options={countryOptions}
           />
@@ -288,7 +376,7 @@ const UserManagement = () => {
                 key={role}
                 color={ROLE_COLORS[role]}
                 style={{ cursor: 'pointer', fontSize: 12 }}
-                onClick={() => setFilterRole(filterRole === role ? null : role)}
+                onClick={() => handleFilterRole(filterRole === role ? null : role)}
               >
                 {label}: {count} 人
               </Tag>
@@ -305,6 +393,7 @@ const UserManagement = () => {
           rowKey="id"
           pagination={{ pageSize: 10 }}
           locale={{ emptyText: '尚無使用者' }}
+          loading={loading}
         />
       </div>
 

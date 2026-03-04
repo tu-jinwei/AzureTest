@@ -1,15 +1,34 @@
-import React, { useState } from 'react';
-import { Button, Tag, Input, Select, Empty } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Button, Tag, Input, Select, Empty, Spin } from 'antd';
 import { SendOutlined, RobotOutlined } from '@ant-design/icons';
-import { agents } from '../data/mockData';
+import { agentAPI } from '../services/api';
+import { adaptAgents } from '../utils/adapters';
+import { agents as mockAgents } from '../data/mockData';
 import './AgentChat.css';
 
 const { TextArea } = Input;
 
 const AgentChat = () => {
+  const [agents, setAgents] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
+
+  useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        const res = await agentAPI.list();
+        setAgents(adaptAgents(res.data));
+      } catch (err) {
+        console.warn('Agent API 失敗，使用 mock 資料', err);
+        setAgents(mockAgents);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAgents();
+  }, []);
 
   const handleSelectAgent = (agentId) => {
     const agent = agents.find((a) => a.id === agentId);
@@ -28,6 +47,14 @@ const AgentChat = () => {
     setMessages((prev) => [...prev, userMsg, botMsg]);
     setInputValue('');
   };
+
+  if (loading) {
+    return (
+      <div className="agent-chat-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
+        <Spin size="large" tip="載入 Agent 列表中..." />
+      </div>
+    );
+  }
 
   return (
     <div className="agent-chat-page">

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Modal, Button, Pagination, Empty } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Modal, Button, Pagination, Empty, Spin } from 'antd';
 import {
   BookOutlined,
   FilePdfOutlined,
@@ -7,18 +7,45 @@ import {
   EyeOutlined,
   LeftOutlined,
 } from '@ant-design/icons';
-import { libraries } from '../data/mockData';
+import { libraryAPI } from '../services/api';
+import { adaptLibraryDocs } from '../utils/adapters';
+import { libraries as mockLibraries } from '../data/mockData';
 import './Library.css';
 
 const DOCS_PER_PAGE = 4;
 
 const Library = () => {
+  const [libraries, setLibraries] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedLibrary, setSelectedLibrary] = useState(null);
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [pageMap, setPageMap] = useState({});
 
+  useEffect(() => {
+    const fetchLibrary = async () => {
+      try {
+        const res = await libraryAPI.list();
+        setLibraries(adaptLibraryDocs(res.data));
+      } catch (err) {
+        console.warn('圖書館 API 失敗，使用 mock 資料', err);
+        setLibraries(mockLibraries);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchLibrary();
+  }, []);
+
   const getPage = (libId) => pageMap[libId] || 1;
   const setPage = (libId, page) => setPageMap((prev) => ({ ...prev, [libId]: page }));
+
+  if (loading) {
+    return (
+      <div className="library-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
+        <Spin size="large" tip="載入圖書館資料中..." />
+      </div>
+    );
+  }
 
   return (
     <div className="library-page">

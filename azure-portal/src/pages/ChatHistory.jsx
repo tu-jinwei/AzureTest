@@ -1,24 +1,51 @@
-import React, { useState } from 'react';
-import { Modal, Tag, Input, Select, Empty } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Modal, Tag, Input, Select, Empty, Spin } from 'antd';
 import {
   HistoryOutlined,
   SearchOutlined,
   MessageOutlined,
   ClockCircleOutlined,
 } from '@ant-design/icons';
-import { chatHistory, agents } from '../data/mockData';
+import { chatAPI } from '../services/api';
+import { adaptChatHistory } from '../utils/adapters';
+import { chatHistory as mockChatHistory, agents } from '../data/mockData';
 import './ChatHistory.css';
 
 const ChatHistory = () => {
+  const [chatHistory, setChatHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedChat, setSelectedChat] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [filterAgent, setFilterAgent] = useState(null);
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const res = await chatAPI.history();
+        setChatHistory(adaptChatHistory(res.data));
+      } catch (err) {
+        console.warn('聊天歷史 API 失敗（MongoDB 可能未連線），使用 mock 資料', err);
+        setChatHistory(mockChatHistory);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchHistory();
+  }, []);
 
   const filteredHistory = chatHistory.filter((chat) => {
     const matchSearch = !searchText || chat.agentName.includes(searchText) || chat.lastMessage.includes(searchText);
     const matchAgent = !filterAgent || chat.agentId === filterAgent;
     return matchSearch && matchAgent;
   });
+
+  if (loading) {
+    return (
+      <div className="chat-history-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
+        <Spin size="large" tip="載入對話歷史中..." />
+      </div>
+    );
+  }
 
   return (
     <div className="chat-history-page">
