@@ -81,6 +81,7 @@ from api.agent_api import router as agent_router
 from api.announcement_api import router as announcement_router
 from api.library_api import router as library_router
 from api.chat_api import router as chat_router
+from api.country_api import router as country_router
 
 app.include_router(auth_router, prefix="/api/auth", tags=["認證"])
 app.include_router(user_router, prefix="/api/users", tags=["使用者管理"])
@@ -88,6 +89,7 @@ app.include_router(agent_router, prefix="/api/agents", tags=["Agent"])
 app.include_router(announcement_router, prefix="/api/announcements", tags=["公告"])
 app.include_router(library_router, prefix="/api/library", tags=["圖書館"])
 app.include_router(chat_router, prefix="/api/chat", tags=["對話"])
+app.include_router(country_router, prefix="/api/countries", tags=["國家"])
 
 
 # === 健康檢查 ===

@@ -4,7 +4,7 @@ Local DB Models（各國 PostgreSQL）
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from core.local_database import LocalBase
@@ -42,6 +42,26 @@ class LocalNotice(LocalBase):
     content_en = Column(Text)
     files = Column(JSONB, default=[])
     publish_status = Column(String(20), default="draft")  # draft / published
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class LocalLibrary(LocalBase):
+    """本地圖書館（各國獨立）"""
+    __tablename__ = "local_library"
+
+    doc_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    library_name = Column(String(255), nullable=False)
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    metadata_json = Column("metadata", JSONB, nullable=False, default={})
+    auth_rules = Column(JSONB, nullable=False, default={
+        "authorized_roles": [],
+        "authorized_users": [],
+        "exception_list": [],
+    })
+    file_url = Column(Text)  # 向後相容：第一個檔案的路徑
+    files_json = Column("files", JSONB, nullable=False, default=[])  # 多檔案資訊
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

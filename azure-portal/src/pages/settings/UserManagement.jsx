@@ -22,16 +22,18 @@ import {
   TeamOutlined,
   SearchOutlined,
   LockOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import { userAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCountry } from '../../contexts/CountryContext';
 import { adaptUsers, toUserCreate } from '../../utils/adapters';
 import {
   userList as mockUserList,
   ROLES,
   ROLE_LABELS,
   ROLE_COLORS,
-  countries,
+  countries as mockCountries,
   canOperateUser,
   getAssignableRoles as getAssignableRolesFallback,
 } from '../../data/mockData';
@@ -39,6 +41,8 @@ import '../Settings.css';
 
 const UserManagement = () => {
   const { user: currentUser } = useAuth();
+  const { countries: countryList } = useCountry();
+
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -49,9 +53,14 @@ const UserManagement = () => {
   const [assignableRoles, setAssignableRoles] = useState([]);
   const [form] = Form.useForm();
 
+  // 使用 CountryContext 的國家列表，若為空則 fallback 到 mockCountries
+  const countries = countryList.length > 0 ? countryList : mockCountries;
+
   // 當前使用者的角色和 email
   const myRole = currentUser?.role || 'user';
   const myEmail = currentUser?.email || '';
+  const myCountry = currentUser?.country || 'TW';
+  const isSuperAdmin = myRole === 'super_admin';
 
   // ===== 載入可指派角色列表 =====
   const fetchAssignableRoles = useCallback(async () => {
@@ -129,7 +138,12 @@ const UserManagement = () => {
     const defaultRole = assignableRoles.length > 0
       ? assignableRoles[assignableRoles.length - 1].value
       : ROLES.USER;
-    form.setFieldsValue({ role: defaultRole, status: 'active' });
+    // 非 super_admin 預設國家為自己的國家
+    form.setFieldsValue({
+      role: defaultRole,
+      status: 'active',
+      country: isSuperAdmin ? undefined : myCountry,
+    });
     setModalOpen(true);
   };
 
@@ -206,6 +220,21 @@ const UserManagement = () => {
       });
     } catch (err) {
       message.error('操作失敗：' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  // ===== 刪除使用者 =====
+  const handleDeleteUser = async (email) => {
+    try {
+      await userAPI.delete(email);
+      message.success('使用者已永久刪除');
+      fetchUsers({
+        search: searchText || undefined,
+        role: filterRole || undefined,
+        country: filterCountry || undefined,
+      });
+    } catch (err) {
+      message.error('刪除失敗：' + (err.response?.data?.detail || err.message));
     }
   };
 
@@ -350,7 +379,7 @@ const UserManagement = () => {
     {
       title: '操作',
       key: 'actions',
-      width: 200,
+      width: 280,
       render: (_, record) => {
         const operable = canOperate(record);
         return (
@@ -403,6 +432,30 @@ const UserManagement = () => {
                 </Button>
               </Tooltip>
             )}
+            {operable ? (
+              <Popconfirm
+                title="確定要永久刪除此使用者嗎？此操作無法復原！"
+                onConfirm={() => handleDeleteUser(record.email)}
+                okText="確定刪除"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+              >
+                <Button type="text" danger icon={<DeleteOutlined />}>
+                  刪除
+                </Button>
+              </Popconfirm>
+            ) : (
+              <Tooltip title="權限不足">
+                <Button
+                  type="text"
+                  icon={<DeleteOutlined />}
+                  disabled
+                  style={{ color: '#ccc' }}
+                >
+                  刪除
+                </Button>
+              </Tooltip>
+            )}
           </Space>
         );
       },
@@ -433,14 +486,17 @@ const UserManagement = () => {
             allowClear
             options={allRoleOptions}
           />
-          <Select
-            placeholder="篩選國家"
-            style={{ width: 120 }}
-            value={filterCountry}
-            onChange={handleFilterCountry}
-            allowClear
-            options={countryOptions}
-          />
+          {/* 只有 super_admin 可以篩選國家 */}
+          {isSuperAdmin && (
+            <Select
+              placeholder="篩選國家"
+              style={{ width: 120 }}
+              value={filterCountry}
+              onChange={handleFilterCountry}
+              allowClear
+              options={countryOptions}
+            />
+          )}
           <Button
             type="primary"
             icon={<PlusOutlined />}
@@ -537,10 +593,12 @@ const UserManagement = () => {
             name="country"
             label="所屬國家"
             rules={[{ required: true, message: '請選擇所屬國家' }]}
+            extra={!isSuperAdmin ? '非最高管理者只能建立自己國家的使用者' : ''}
           >
             <Select
               placeholder="請選擇所屬國家"
               options={countryOptions}
+              disabled={!!editingUser || !isSuperAdmin}
             />
           </Form.Item>
           <Form.Item

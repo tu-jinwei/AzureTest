@@ -108,3 +108,13 @@
   color: var(--text-light);
   cursor: pointer;
 }
+
+.topbar-country-tag {
+  margin-right: 8px;
+  font-size: 12px;
+  line-height: 22px;
+}
+
+.topbar-country-select .ant-select-selector {
+  border-radius: 6px !important;
+}

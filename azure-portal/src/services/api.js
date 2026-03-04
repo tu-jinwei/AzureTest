@@ -80,6 +80,9 @@ export const userAPI = {
 
   getAssignableRoles: () =>
     api.get('/users/assignable-roles'),
+
+  delete: (email) =>
+    api.delete(`/users/${encodeURIComponent(email)}`),
 };
 
 // ===== Agent API =====
@@ -99,29 +102,75 @@ export const agentAPI = {
 
 // ===== 公告 API =====
 export const announcementAPI = {
-  list: () =>
-    api.get('/announcements'),
+  /** @param {string} [country] - 國家代碼（僅 super_admin 可跨國） */
+  list: (country) =>
+    api.get('/announcements', { params: country ? { country } : {} }),
 
-  listAll: () =>
-    api.get('/announcements/all'),
+  /** @param {string} [country] - 國家代碼（僅 super_admin 可跨國） */
+  listAll: (country) =>
+    api.get('/announcements/all', { params: country ? { country } : {} }),
 
-  create: (data) =>
-    api.post('/announcements', data),
+  /** @param {string} [country] - 目標國家（僅 super_admin 可跨國建立） */
+  create: (data, country) =>
+    api.post('/announcements', data, { params: country ? { country } : {} }),
 
-  update: (noticeId, data) =>
-    api.put(`/announcements/${noticeId}`, data),
+  /** @param {string} [country] - 目標國家（僅 super_admin 可跨國編輯） */
+  update: (noticeId, data, country) =>
+    api.put(`/announcements/${noticeId}`, data, { params: country ? { country } : {} }),
 
-  delete: (noticeId) =>
-    api.delete(`/announcements/${noticeId}`),
+  /** @param {string} [country] - 目標國家（僅 super_admin 可跨國刪除） */
+  delete: (noticeId, country) =>
+    api.delete(`/announcements/${noticeId}`, { params: country ? { country } : {} }),
+
+  /** 下載公告附件
+   * @param {string} noticeId - 公告 ID
+   * @param {string} [country] - 國家代碼
+   * @param {string} [filename] - 指定下載的檔案名稱（多附件時使用）
+   */
+  download: (noticeId, country, filename) =>
+    api.get(`/announcements/${noticeId}/download`, {
+      responseType: 'blob',
+      params: {
+        ...(country ? { country } : {}),
+        ...(filename ? { filename } : {}),
+      },
+    }),
+
+  /** 預覽公告附件 PDF（回傳 blob）
+   * @param {string} noticeId - 公告 ID
+   * @param {string} [country] - 國家代碼
+   * @param {string} [filename] - 指定預覽的檔案名稱（多附件時使用）
+   */
+  preview: (noticeId, country, filename) =>
+    api.get(`/announcements/${noticeId}/preview`, {
+      responseType: 'blob',
+      params: {
+        ...(country ? { country } : {}),
+        ...(filename ? { filename } : {}),
+      },
+    }),
+
+  /** 上傳公告附件（支援多檔案）
+   * @param {string} noticeId - 公告 ID
+   * @param {FormData} formData - 包含 file 的 FormData（可多個）
+   * @param {string} [country] - 國家代碼（僅 super_admin 可跨國）
+   */
+  uploadFile: (noticeId, formData, country) =>
+    api.post('/announcements/upload-file', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params: { notice_id: noticeId, ...(country ? { country } : {}) },
+    }),
 };
 
 // ===== 圖書館 API =====
 export const libraryAPI = {
-  list: () =>
-    api.get('/library'),
+  /** @param {string} [country] - 國家代碼（僅 super_admin 可跨國） */
+  list: (country) =>
+    api.get('/library', { params: country ? { country } : {} }),
 
-  listAll: () =>
-    api.get('/library/all'),
+  /** @param {string} [country] - 國家代碼（僅 super_admin 可跨國） */
+  listAll: (country) =>
+    api.get('/library/all', { params: country ? { country } : {} }),
 
   upload: (formData, config = {}) =>
     api.post('/library/upload', formData, {
@@ -129,14 +178,50 @@ export const libraryAPI = {
       ...config,
     }),
 
-  delete: (docId) =>
-    api.delete(`/library/${docId}`),
+  /** @param {object} [config] - axios config（可含 params.country） */
+  delete: (docId, config = {}) =>
+    api.delete(`/library/${docId}`, config),
 
-  updateAuth: (docId, authData) =>
-    api.put(`/library/${docId}/auth`, authData),
+  /** @param {string} [country] - 國家代碼（僅 super_admin 可跨國） */
+  updateAuth: (docId, authData, country) =>
+    api.put(`/library/${docId}/auth`, authData, { params: country ? { country } : {} }),
 
-  download: (docId) =>
-    api.get(`/library/${docId}/download`, { responseType: 'blob' }),
+  /** 下載文件
+   * @param {string} docId - 文件 ID
+   * @param {string} [country] - 國家代碼（僅 super_admin 可跨國）
+   * @param {string} [filename] - 指定下載的檔案名稱（多檔案時使用）
+   */
+  download: (docId, country, filename) =>
+    api.get(`/library/${docId}/download`, {
+      responseType: 'blob',
+      params: {
+        ...(country ? { country } : {}),
+        ...(filename ? { filename } : {}),
+      },
+    }),
+
+  /** 預覽 PDF（回傳 blob）
+   * @param {string} docId - 文件 ID
+   * @param {string} [country] - 國家代碼（僅 super_admin 可跨國）
+   * @param {string} [filename] - 指定預覽的檔案名稱（多檔案時使用）
+   */
+  preview: (docId, country, filename) =>
+    api.get(`/library/${docId}/preview`, {
+      responseType: 'blob',
+      params: {
+        ...(country ? { country } : {}),
+        ...(filename ? { filename } : {}),
+      },
+    }),
+
+  /** 刪除整個館（僅限空館）
+   * @param {string} libraryName - 館名
+   * @param {string} [country] - 國家代碼（僅 super_admin 可跨國）
+   */
+  deleteLibrary: (libraryName, country) =>
+    api.delete(`/library/by-library/${encodeURIComponent(libraryName)}`, {
+      params: country ? { country } : {},
+    }),
 };
 
 // ===== 對話 API（暫時保留，等 MongoDB）=====
@@ -149,6 +234,13 @@ export const chatAPI = {
 
   detail: (chatId) =>
     api.get(`/chat/${chatId}`),
+};
+
+// ===== 國家 API =====
+export const countryAPI = {
+  /** 取得已設定 Local DB 的國家列表 */
+  list: () =>
+    api.get('/countries'),
 };
 
 export default api;

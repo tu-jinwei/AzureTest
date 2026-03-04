@@ -17,6 +17,9 @@ dist-ssr/
 build/
 backend/static/
 
+# Uploaded files
+backend/uploads/
+
 # Logs
 logs/
 *.log

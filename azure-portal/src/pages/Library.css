@@ -168,7 +168,7 @@
 }
 
 .pdf-preview-placeholder {
-  height: 300px;
+  height: 400px;
   background: #fafafa;
   border: 2px dashed var(--border-color);
   border-radius: 8px;
@@ -188,6 +188,52 @@
 .pdf-preview-hint {
   font-size: 12px !important;
   color: #ccc !important;
+}
+
+/* PDF iframe 預覽 */
+.pdf-preview-iframe {
+  width: 100%;
+  height: 500px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+/* 多檔案切換列表 */
+.pdf-file-list {
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.pdf-file-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pdf-file-tag {
+  cursor: pointer;
+  padding: 4px 10px;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.pdf-file-tag:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.pdf-file-size {
+  font-size: 11px;
+  color: var(--text-light);
+  margin-left: 4px;
+}
+
+/* 文件卡片上的檔案數量標記 */
+.library-doc-card-badge {
+  margin-top: 8px;
 }
 
 .pdf-preview-info {

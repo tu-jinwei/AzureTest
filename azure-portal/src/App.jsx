@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
 import zhTW from 'antd/locale/zh_TW';
 import { AuthProvider } from './contexts/AuthContext';
+import { CountryProvider } from './contexts/CountryContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -27,6 +28,7 @@ const App = () => {
       }}
     >
       <AuthProvider>
+        <CountryProvider>
         <BrowserRouter basename="/AzureTest">
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -56,6 +58,7 @@ const App = () => {
             </Route>
           </Routes>
         </BrowserRouter>
+        </CountryProvider>
       </AuthProvider>
     </ConfigProvider>
   );

@@ -1,15 +1,20 @@
 import React from 'react';
-import { MenuOutlined, UserOutlined, TeamOutlined, LogoutOutlined } from '@ant-design/icons';
-import { Avatar, Tag, Button, Tooltip } from 'antd';
+import { MenuOutlined, UserOutlined, TeamOutlined, LogoutOutlined, GlobalOutlined } from '@ant-design/icons';
+import { Avatar, Tag, Button, Tooltip, Select } from 'antd';
 import { useAuth } from '../contexts/AuthContext';
+import { useCountry } from '../contexts/CountryContext';
 import { ROLE_LABELS, ROLE_COLORS } from '../data/mockData';
 import './TopBar.css';
 
 const TopBar = ({ onToggleSidebar }) => {
   const { user, logout } = useAuth();
+  const { countries, selectedCountry, displayCountry, isSuperAdmin, setSelectedCountry } = useCountry();
 
   const roleLabel = user ? (ROLE_LABELS[user.role] || user.role) : '';
   const roleColor = user ? (ROLE_COLORS[user.role] || '#999') : '#999';
+
+  // 取得顯示用的國家名稱
+  const countryName = countries.find((c) => c.code === displayCountry)?.name || displayCountry;
 
   const handleLogout = async () => {
     await logout();
@@ -33,6 +38,24 @@ const TopBar = ({ onToggleSidebar }) => {
       <div className="topbar-right">
         {user && (
           <>
+            {/* 國家顯示區域 */}
+            {isSuperAdmin ? (
+              <Select
+                value={selectedCountry}
+                onChange={setSelectedCountry}
+                placeholder="選擇國家"
+                size="small"
+                style={{ width: 150, marginRight: 8 }}
+                options={countries.map((c) => ({ value: c.code, label: `${c.name} (${c.code})` }))}
+                className="topbar-country-select"
+              />
+            ) : (
+              <Tag color="blue" className="topbar-country-tag">
+                <GlobalOutlined style={{ marginRight: 4 }} />
+                {countryName}
+              </Tag>
+            )}
+
             <div className="topbar-user-info">
               <span className="topbar-user-name">{user.name || user.email}</span>
               <Tag

@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """
 CTBC AI Portal - DB Seed Script
-初始化 Global DB schema 並插入測試資料
+初始化 Global DB + 各國 Local DB schema 並插入測試資料
 
 使用方式：
   cd Azure/backend && python seed_data.py          # 建立表 + 插入資料
   cd Azure/backend && python seed_data.py --drop    # 先 DROP 所有表再重建
 """
 import argparse
+import json
 import sys
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
 
@@ -22,16 +24,29 @@ from sqlalchemy.orm import Session
 from config import settings
 
 
-def get_engine():
-    """建立同步 SQLAlchemy engine"""
+def get_global_engine():
+    """建立 Global DB 同步 engine"""
     url = settings.GLOBAL_DB_URL_SYNC
     print(f"📡 連線到 Global DB: {settings.GLOBAL_DB_HOST}:{settings.GLOBAL_DB_PORT}/{settings.GLOBAL_DB_NAME}")
     return create_engine(url, echo=False)
 
 
-def drop_tables(engine):
+def get_local_engine(country_code: str):
+    """建立指定國家的 Local DB 同步 engine"""
+    config = settings.LOCAL_DB_CONFIG.get(country_code)
+    if not config:
+        print(f"   ⚠️ 國家 [{country_code}] 未設定 Local DB，跳過")
+        return None
+    user = quote_plus(config['pg_user'])
+    password = quote_plus(config['pg_password'])
+    url = f"postgresql+psycopg2://{user}:{password}@{config['pg_host']}:{config['pg_port']}/{config['pg_db']}"
+    print(f"📡 連線到 Local DB [{country_code}]: {config['pg_host']}:{config['pg_port']}/{config['pg_db']}")
+    return create_engine(url, echo=False)
+
+
+def drop_global_tables(engine):
     """DROP 所有 Global DB 表"""
-    print("\n🗑️  正在 DROP 所有表...")
+    print("\n🗑️  正在 DROP Global DB 所有表...")
     table_names = [
         "global_audit_log",
         "global_library",
@@ -43,24 +58,54 @@ def drop_tables(engine):
         for table in table_names:
             conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
             print(f"   ✅ DROP TABLE {table}")
-    print("🗑️  所有表已刪除")
+    print("🗑️  Global DB 所有表已刪除")
 
 
-def create_tables(engine):
+def drop_local_tables(engine, country_code: str):
+    """DROP 所有 Local DB 表"""
+    print(f"\n🗑️  正在 DROP Local DB [{country_code}] 所有表...")
+    table_names = [
+        "file_lifecycle",
+        "local_library",
+        "local_notice",
+        "login_audit",
+        "otp_vault",
+    ]
+    with engine.begin() as conn:
+        for table in table_names:
+            conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
+            print(f"   ✅ [{country_code}] DROP TABLE {table}")
+    print(f"🗑️  Local DB [{country_code}] 所有表已刪除")
+
+
+def create_global_tables(engine):
     """建立所有 Global DB 表"""
     print("\n📦 正在建立 Global DB 表...")
-
-    # 匯入 models 以註冊到 GlobalBase.metadata
     from core.database import GlobalBase
-    import models.global_models  # noqa: F401 - 確保 models 被載入
+    import models.global_models  # noqa: F401
 
     GlobalBase.metadata.create_all(bind=engine)
     print("   ✅ user_route_map")
     print("   ✅ agent_master")
     print("   ✅ agent_acl")
-    print("   ✅ global_library")
+    print("   ✅ global_library (保留但不再使用)")
     print("   ✅ global_audit_log")
-    print("📦 所有表已建立")
+    print("📦 Global DB 所有表已建立")
+
+
+def create_local_tables(engine, country_code: str):
+    """建立所有 Local DB 表"""
+    print(f"\n📦 正在建立 Local DB [{country_code}] 表...")
+    from core.local_database import LocalBase
+    import models.local_models  # noqa: F401
+
+    LocalBase.metadata.create_all(bind=engine)
+    print(f"   ✅ [{country_code}] otp_vault")
+    print(f"   ✅ [{country_code}] login_audit")
+    print(f"   ✅ [{country_code}] local_notice")
+    print(f"   ✅ [{country_code}] local_library")
+    print(f"   ✅ [{country_code}] file_lifecycle")
+    print(f"📦 Local DB [{country_code}] 所有表已建立")
 
 
 def seed_users(session: Session):
@@ -69,10 +114,12 @@ def seed_users(session: Session):
     from models.global_models import UserRouteMap
 
     users = [
+        {"email": "super@ctbc.com", "name": "Super Admin", "department": "IT", "country_code": "TW", "role": "super_admin", "status": "active"},
         {"email": "tina@ctbc.com", "name": "Tina", "department": "規劃部", "country_code": "TW", "role": "platform_admin", "status": "active"},
         {"email": "john@ctbc.com", "name": "John", "department": "研發部", "country_code": "TW", "role": "user_manager", "status": "active"},
         {"email": "alice@ctbc.com", "name": "Alice", "department": "行銷部", "country_code": "TW", "role": "library_manager", "status": "active"},
         {"email": "bob@ctbc.com.sg", "name": "Bob", "department": "財務部", "country_code": "SG", "role": "user", "status": "active"},
+        {"email": "admin.sg@ctbc.com", "name": "SG Admin", "department": "管理部", "country_code": "SG", "role": "platform_admin", "status": "active"},
         {"email": "carol@ctbc.com", "name": "Carol", "department": "人資部", "country_code": "TW", "role": "user", "status": "active"},
         {"email": "david@ctbc.co.jp", "name": "David", "department": "研發部", "country_code": "JP", "role": "user", "status": "active"},
         {"email": "eva@ctbc.com", "name": "Eva", "department": "規劃部", "country_code": "TW", "role": "user", "status": "inactive"},
@@ -91,8 +138,8 @@ def seed_users(session: Session):
             created_at=now,
             updated_at=now,
         )
-        session.merge(user)  # merge 避免重複插入時報錯
-        print(f"   ✅ {u['email']} ({u['name']}, {u['role']})")
+        session.merge(user)
+        print(f"   ✅ {u['email']} ({u['name']}, {u['role']}, {u['country_code']})")
 
     session.commit()
     print(f"👥 已插入 {len(users)} 筆使用者資料")
@@ -193,38 +240,79 @@ def seed_agent_acl(session: Session, agent_ids: list):
     print(f"🔐 已插入 {len(agent_ids)} 筆 Agent ACL 資料")
 
 
-def seed_library(session: Session):
-    """插入圖書館 seed 資料"""
-    print("\n📚 正在插入圖書館資料...")
-    from models.global_models import GlobalLibrary
+def seed_local_library(session: Session, country_code: str):
+    """插入各國圖書館 seed 資料到 Local DB"""
+    print(f"\n📚 正在插入 [{country_code}] 圖書館資料...")
+    from models.local_models import LocalLibrary
 
-    libraries = [
-        {
-            "library_name": "Cloud Architecture",
-            "documents": [
-                {"name": "AWS Best Practices Guide", "description": "Comprehensive guide for AWS cloud architecture design patterns and best practices."},
-                {"name": "Azure Fundamentals", "description": "Introduction to Microsoft Azure services and cloud computing concepts."},
-                {"name": "GCP Infrastructure Design", "description": "Google Cloud Platform infrastructure design and deployment strategies."},
-                {"name": "Multi-Cloud Strategy", "description": "Strategies for implementing and managing multi-cloud environments."},
-                {"name": "Cloud Security Framework", "description": "Security frameworks and compliance standards for cloud deployments."},
-            ],
-        },
-        {
-            "library_name": "Project Management",
-            "documents": [
-                {"name": "Agile Methodology Handbook", "description": "Complete handbook for agile project management methodologies."},
-                {"name": "Risk Assessment Templates", "description": "Templates and guidelines for project risk assessment and mitigation."},
-                {"name": "Stakeholder Communication Plan", "description": "Best practices for stakeholder communication and engagement."},
-            ],
-        },
-        {
-            "library_name": "Compliance & Regulations",
-            "documents": [
-                {"name": "GDPR Compliance Guide", "description": "Guidelines for ensuring GDPR compliance in data processing activities."},
-                {"name": "ISO 27001 Standards", "description": "Information security management system standards and implementation."},
-            ],
-        },
-    ]
+    # 各國的圖書館資料
+    library_data = {
+        "TW": [
+            {
+                "library_name": "Cloud Architecture",
+                "documents": [
+                    {"name": "AWS Best Practices Guide", "description": "Comprehensive guide for AWS cloud architecture design patterns and best practices."},
+                    {"name": "Azure Fundamentals", "description": "Introduction to Microsoft Azure services and cloud computing concepts."},
+                    {"name": "GCP Infrastructure Design", "description": "Google Cloud Platform infrastructure design and deployment strategies."},
+                    {"name": "Multi-Cloud Strategy", "description": "Strategies for implementing and managing multi-cloud environments."},
+                    {"name": "Cloud Security Framework", "description": "Security frameworks and compliance standards for cloud deployments."},
+                ],
+            },
+            {
+                "library_name": "Project Management",
+                "documents": [
+                    {"name": "Agile Methodology Handbook", "description": "Complete handbook for agile project management methodologies."},
+                    {"name": "Risk Assessment Templates", "description": "Templates and guidelines for project risk assessment and mitigation."},
+                    {"name": "Stakeholder Communication Plan", "description": "Best practices for stakeholder communication and engagement."},
+                ],
+            },
+            {
+                "library_name": "Compliance & Regulations",
+                "documents": [
+                    {"name": "GDPR Compliance Guide", "description": "Guidelines for ensuring GDPR compliance in data processing activities."},
+                    {"name": "ISO 27001 Standards", "description": "Information security management system standards and implementation."},
+                ],
+            },
+        ],
+        "SG": [
+            {
+                "library_name": "Singapore Regulations",
+                "documents": [
+                    {"name": "MAS Technology Risk Management", "description": "MAS guidelines on technology risk management for financial institutions."},
+                    {"name": "PDPA Compliance Guide", "description": "Personal Data Protection Act compliance guidelines for Singapore operations."},
+                ],
+            },
+            {
+                "library_name": "APAC Operations",
+                "documents": [
+                    {"name": "Cross-Border Payment Guide", "description": "Guide for cross-border payment processing in APAC region."},
+                ],
+            },
+        ],
+        "JP": [
+            {
+                "library_name": "Japan Compliance",
+                "documents": [
+                    {"name": "FSA Regulatory Framework", "description": "Financial Services Agency regulatory framework for banking operations in Japan."},
+                    {"name": "APPI Data Protection", "description": "Act on the Protection of Personal Information compliance guide."},
+                ],
+            },
+        ],
+        "TH": [
+            {
+                "library_name": "Thailand Operations",
+                "documents": [
+                    {"name": "BOT Regulations Overview", "description": "Bank of Thailand regulatory overview for foreign bank branches."},
+                    {"name": "PDPA Thailand Guide", "description": "Thailand Personal Data Protection Act compliance guidelines."},
+                ],
+            },
+        ],
+    }
+
+    libraries = library_data.get(country_code, [])
+    if not libraries:
+        print(f"   ℹ️ [{country_code}] 無圖書館種子資料")
+        return
 
     now = datetime.now(timezone.utc)
     total = 0
@@ -232,7 +320,7 @@ def seed_library(session: Session):
 
     for lib in libraries:
         for doc in lib["documents"]:
-            entry = GlobalLibrary(
+            entry = LocalLibrary(
                 doc_id=uuid.uuid4(),
                 library_name=lib["library_name"],
                 name=doc["name"],
@@ -248,10 +336,56 @@ def seed_library(session: Session):
             )
             session.add(entry)
             total += 1
-            print(f"   ✅ [{lib['library_name']}] {doc['name']}")
+            print(f"   ✅ [{country_code}][{lib['library_name']}] {doc['name']}")
 
     session.commit()
-    print(f"📚 已插入 {total} 筆圖書館文件資料")
+    print(f"📚 [{country_code}] 已插入 {total} 筆圖書館文件資料")
+
+
+def seed_local_announcements(session: Session, country_code: str):
+    """插入各國公告 seed 資料到 Local DB"""
+    print(f"\n📢 正在插入 [{country_code}] 公告資料...")
+    from models.local_models import LocalNotice
+
+    announcement_data = {
+        "TW": [
+            {"subject": "海外規範更版", "content_en": "The overseas compliance framework has been updated to version 3.2. All project managers are required to review the updated guidelines.", "publish_status": "published"},
+            {"subject": "專案方法論", "content_en": "A new project methodology has been introduced to streamline cross-functional collaboration.", "publish_status": "published"},
+            {"subject": "年度資安政策更新", "content_en": "Annual cybersecurity policy has been revised. All employees must complete the mandatory security training.", "publish_status": "published"},
+        ],
+        "SG": [
+            {"subject": "MAS Compliance Update", "content_en": "New MAS compliance requirements effective Q2 2026. Please review the updated guidelines.", "publish_status": "published"},
+            {"subject": "Singapore Office Relocation", "content_en": "Our Singapore office will be relocating to Marina Bay Financial Centre in March 2026.", "publish_status": "draft"},
+        ],
+        "JP": [
+            {"subject": "FSA 規制更新", "content_en": "FSA regulatory updates for 2026. All Japan branch operations must comply by end of Q1.", "publish_status": "published"},
+        ],
+        "TH": [
+            {"subject": "BOT New Guidelines", "content_en": "Bank of Thailand has issued new guidelines for digital banking services.", "publish_status": "published"},
+        ],
+    }
+
+    announcements = announcement_data.get(country_code, [])
+    if not announcements:
+        print(f"   ℹ️ [{country_code}] 無公告種子資料")
+        return
+
+    now = datetime.now(timezone.utc)
+    for a in announcements:
+        notice = LocalNotice(
+            notice_id=uuid.uuid4(),
+            subject=a["subject"],
+            content_en=a["content_en"],
+            files=[],
+            publish_status=a["publish_status"],
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(notice)
+        print(f"   ✅ [{country_code}] {a['subject']} ({a['publish_status']})")
+
+    session.commit()
+    print(f"📢 [{country_code}] 已插入 {len(announcements)} 筆公告資料")
 
 
 def main():
@@ -261,51 +395,80 @@ def main():
 
     print("=" * 60)
     print("  CTBC AI Portal - DB Seed Script")
+    print("  Global DB + 各國 Local DB")
     print("=" * 60)
 
+    # === Step 1: Global DB ===
     try:
-        engine = get_engine()
-
-        # 測試連線
-        with engine.connect() as conn:
+        global_engine = get_global_engine()
+        with global_engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        print("✅ 資料庫連線成功")
-
+        print("✅ Global DB 連線成功")
     except Exception as e:
-        print(f"\n❌ 資料庫連線失敗: {e}")
-        print("\n💡 請確認 .env 中的 PostgreSQL 連線設定是否正確：")
-        print(f"   GLOBAL_DB_HOST={settings.GLOBAL_DB_HOST}")
-        print(f"   GLOBAL_DB_PORT={settings.GLOBAL_DB_PORT}")
-        print(f"   GLOBAL_DB_NAME={settings.GLOBAL_DB_NAME}")
-        print(f"   GLOBAL_DB_USER={settings.GLOBAL_DB_USER}")
+        print(f"\n❌ Global DB 連線失敗: {e}")
         sys.exit(1)
 
     try:
-        # Step 1: DROP（如果有 --drop 參數）
         if args.drop:
-            drop_tables(engine)
+            drop_global_tables(global_engine)
 
-        # Step 2: 建立表
-        create_tables(engine)
+        create_global_tables(global_engine)
 
-        # Step 3: 插入 Seed 資料
-        with Session(engine) as session:
+        with Session(global_engine) as session:
             seed_users(session)
             agent_ids = seed_agents(session)
             seed_agent_acl(session, agent_ids)
-            seed_library(session)
-
-        print("\n" + "=" * 60)
-        print("  ✅ Seed 完成！所有資料已成功插入。")
-        print("=" * 60)
 
     except Exception as e:
-        print(f"\n❌ Seed 失敗: {e}")
+        print(f"\n❌ Global DB Seed 失敗: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
     finally:
-        engine.dispose()
+        global_engine.dispose()
+
+    # === Step 2: 各國 Local DB ===
+    configured_countries = list(settings.LOCAL_DB_CONFIG.keys())
+    print(f"\n🌍 已設定的國家: {', '.join(configured_countries)}")
+
+    for country_code in configured_countries:
+        print(f"\n{'─' * 40}")
+        print(f"  處理國家: {country_code}")
+        print(f"{'─' * 40}")
+
+        try:
+            local_engine = get_local_engine(country_code)
+            if not local_engine:
+                continue
+
+            with local_engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            print(f"✅ [{country_code}] Local DB 連線成功")
+
+            if args.drop:
+                drop_local_tables(local_engine, country_code)
+
+            create_local_tables(local_engine, country_code)
+
+            with Session(local_engine) as session:
+                seed_local_library(session, country_code)
+                seed_local_announcements(session, country_code)
+
+        except Exception as e:
+            print(f"\n❌ [{country_code}] Local DB Seed 失敗: {e}")
+            import traceback
+            traceback.print_exc()
+            # 繼續處理其他國家
+            continue
+        finally:
+            if local_engine:
+                local_engine.dispose()
+
+    print("\n" + "=" * 60)
+    print("  ✅ Seed 完成！所有資料已成功插入。")
+    print(f"  Global DB: {settings.GLOBAL_DB_NAME}")
+    print(f"  Local DBs: {', '.join(configured_countries)}")
+    print("=" * 60)
 
 
 if __name__ == "__main__":

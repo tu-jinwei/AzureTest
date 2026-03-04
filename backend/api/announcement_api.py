@@ -1,14 +1,18 @@
 """
 公告 API：CRUD + 發布/取消發布
-公告存在 Local DB（各國 PostgreSQL）
+公告存在 Local DB（各國 PostgreSQL），國家隔離
+super_admin 可跨國查看（透過 ?country=XX 參數）
 """
 import logging
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File
+from fastapi.responses import FileResponse
 from sqlalchemy import delete, select, update
 
+from config import settings
 from core.data_router import data_router
+from core.local_database import local_db_factory
 from core.permissions import require_permission
 from core.security import get_current_user_payload
 from models.local_models import LocalNotice
@@ -18,16 +22,39 @@ from models.schemas import (
     AnnouncementUpdate,
     MessageResponse,
 )
+from services.storage_service import storage_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _resolve_country(payload: dict, query_country: Optional[str] = None) -> str:
+    """
+    解析要查詢的國家：
+    - super_admin 可透過 query param 指定國家
+    - 其他角色只能查自己的國家
+    """
+    user_country = payload.get("country", "TW")
+    role = payload.get("role", "user")
+
+    if query_country and query_country != user_country:
+        if role != "super_admin":
+            raise HTTPException(status_code=403, detail="只有最高管理者可以跨國查看")
+        if query_country not in settings.LOCAL_DB_CONFIG:
+            raise HTTPException(status_code=400, detail=f"國家 [{query_country}] 不存在")
+        return query_country
+
+    return user_country
+
+
 @router.get("", response_model=List[AnnouncementResponse])
-async def list_announcements(payload: dict = Depends(get_current_user_payload)):
+async def list_announcements(
+    country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
+    payload: dict = Depends(get_current_user_payload),
+):
     """取得公告列表（已發布的）"""
-    country = payload.get("country", "TW")
-    session = await data_router.get_local_pg(country)
+    target_country = _resolve_country(payload, country)
+    session = await data_router.get_local_pg(target_country)
     try:
         result = await session.execute(
             select(LocalNotice)
@@ -42,11 +69,12 @@ async def list_announcements(payload: dict = Depends(get_current_user_payload)):
 
 @router.get("/all", response_model=List[AnnouncementResponse])
 async def list_all_announcements(
+    country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
     payload: dict = Depends(require_permission("manage_announcements")),
 ):
     """取得所有公告（含未發布，管理用）"""
-    country = payload.get("country", "TW")
-    session = await data_router.get_local_pg(country)
+    target_country = _resolve_country(payload, country)
+    session = await data_router.get_local_pg(target_country)
     try:
         result = await session.execute(
             select(LocalNotice).order_by(LocalNotice.created_at.desc())
@@ -60,11 +88,12 @@ async def list_all_announcements(
 @router.post("", response_model=MessageResponse)
 async def create_announcement(
     body: AnnouncementCreate,
+    country: Optional[str] = Query(None, description="目標國家（僅 super_admin 可跨國建立）"),
     payload: dict = Depends(require_permission("manage_announcements")),
 ):
     """新增公告"""
-    country = payload.get("country", "TW")
-    session = await data_router.get_local_pg(country)
+    target_country = _resolve_country(payload, country)
+    session = await data_router.get_local_pg(target_country)
     try:
         notice = LocalNotice(
             subject=body.subject,
@@ -83,10 +112,11 @@ async def create_announcement(
 async def update_announcement(
     notice_id: str,
     body: AnnouncementUpdate,
+    country: Optional[str] = Query(None, description="目標國家（僅 super_admin 可跨國編輯）"),
     payload: dict = Depends(require_permission("manage_announcements")),
 ):
     """編輯公告"""
-    country = payload.get("country", "TW")
+    target_country = _resolve_country(payload, country)
     update_data = {}
     if body.subject is not None:
         update_data["subject"] = body.subject
@@ -100,7 +130,7 @@ async def update_announcement(
     if not update_data:
         raise HTTPException(status_code=400, detail="沒有要更新的欄位")
 
-    session = await data_router.get_local_pg(country)
+    session = await data_router.get_local_pg(target_country)
     try:
         result = await session.execute(
             update(LocalNotice)
@@ -118,11 +148,12 @@ async def update_announcement(
 @router.delete("/{notice_id}", response_model=MessageResponse)
 async def delete_announcement(
     notice_id: str,
+    country: Optional[str] = Query(None, description="目標國家（僅 super_admin 可跨國刪除）"),
     payload: dict = Depends(require_permission("manage_announcements")),
 ):
     """刪除公告"""
-    country = payload.get("country", "TW")
-    session = await data_router.get_local_pg(country)
+    target_country = _resolve_country(payload, country)
+    session = await data_router.get_local_pg(target_country)
     try:
         result = await session.execute(
             delete(LocalNotice).where(LocalNotice.notice_id == notice_id)
@@ -130,9 +161,183 @@ async def delete_announcement(
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="公告不存在")
         await session.commit()
-        return MessageResponse(message="公告已刪除")
     finally:
         await session.close()
+
+    # 刪除附件檔案
+    storage_service.delete_files(target_country, "announcements", notice_id)
+
+    return MessageResponse(message="公告已刪除")
+
+
+@router.post("/upload-file", response_model=MessageResponse)
+async def upload_announcement_file(
+    request: Request,
+    notice_id: str = Query(..., description="公告 ID"),
+    country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
+    payload: dict = Depends(require_permission("manage_announcements")),
+):
+    """上傳公告附件（支援多檔案）"""
+    target_country = _resolve_country(payload, country)
+
+    # 驗證公告存在
+    session = await data_router.get_local_pg(target_country)
+    try:
+        result = await session.execute(
+            select(LocalNotice).where(LocalNotice.notice_id == notice_id)
+        )
+        notice = result.scalar_one_or_none()
+        if not notice:
+            raise HTTPException(status_code=404, detail="公告不存在")
+        current_files = list(notice.files or [])
+    finally:
+        await session.close()
+
+    # 處理多檔案上傳
+    new_files = []
+    content_type_header = request.headers.get("content-type", "")
+    if "multipart/form-data" in content_type_header:
+        try:
+            form = await request.form()
+            # 嘗試 getlist 取得多個同名欄位
+            uploaded_files = form.getlist("file")
+            if not uploaded_files:
+                # fallback: 單一 file 欄位
+                single_file = form.get("file")
+                if single_file and hasattr(single_file, 'filename') and single_file.filename:
+                    uploaded_files = [single_file]
+
+            for uploaded_file in uploaded_files:
+                if hasattr(uploaded_file, 'filename') and uploaded_file.filename:
+                    file_info = await storage_service.save_file(
+                        target_country, "announcements", notice_id, uploaded_file
+                    )
+                    file_entry = {
+                        "name": file_info["original_filename"],
+                        "file_url": f"/api/announcements/{notice_id}/download?country={target_country}&filename={file_info['original_filename']}",
+                        "file_size": file_info["file_size"],
+                        "storage_path": file_info["relative_path"],
+                    }
+                    new_files.append(file_entry)
+        except Exception as e:
+            logger.warning(f"公告附件上傳失敗: {e}")
+            raise HTTPException(status_code=500, detail=f"檔案上傳失敗: {str(e)}")
+
+    if not new_files:
+        raise HTTPException(status_code=400, detail="未收到任何檔案")
+
+    # 更新公告的 files JSONB（追加）
+    current_files.extend(new_files)
+    session = await data_router.get_local_pg(target_country)
+    try:
+        await session.execute(
+            update(LocalNotice)
+            .where(LocalNotice.notice_id == notice_id)
+            .values(files=current_files)
+        )
+        await session.commit()
+    finally:
+        await session.close()
+
+    uploaded_names = [f["name"] for f in new_files]
+    return MessageResponse(
+        message=f"已上傳 {len(new_files)} 個附件",
+        detail=", ".join(uploaded_names),
+    )
+
+
+@router.get("/{notice_id}/download")
+async def download_announcement_file(
+    notice_id: str,
+    filename: Optional[str] = Query(None, description="指定下載的檔案名稱（多附件時使用）"),
+    country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
+    payload: dict = Depends(get_current_user_payload),
+):
+    """下載公告附件（支援指定檔名下載）"""
+    target_country = _resolve_country(payload, country)
+
+    session = await data_router.get_local_pg(target_country)
+    try:
+        result = await session.execute(
+            select(LocalNotice).where(LocalNotice.notice_id == notice_id)
+        )
+        notice = result.scalar_one_or_none()
+    finally:
+        await session.close()
+
+    if not notice:
+        raise HTTPException(status_code=404, detail="公告不存在")
+
+    files = notice.files or []
+    if not files:
+        raise HTTPException(status_code=404, detail="此公告沒有附件")
+
+    # 決定要下載哪個檔案
+    if filename:
+        file_entry = next((f for f in files if f.get("name") == filename), None)
+        if not file_entry:
+            raise HTTPException(status_code=404, detail=f"找不到附件：{filename}")
+        original_filename = filename
+    else:
+        file_entry = files[0]
+        original_filename = file_entry.get("name", "attachment")
+
+    file_path = storage_service.get_file_path(target_country, "announcements", notice_id, original_filename)
+    if not file_path:
+        raise HTTPException(status_code=404, detail="附件檔案不存在")
+
+    return FileResponse(
+        path=str(file_path),
+        filename=original_filename,
+        media_type="application/octet-stream",
+    )
+
+
+@router.get("/{notice_id}/preview")
+async def preview_announcement_file(
+    notice_id: str,
+    filename: Optional[str] = Query(None, description="指定預覽的檔案名稱（多附件時使用）"),
+    country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
+    payload: dict = Depends(get_current_user_payload),
+):
+    """預覽公告附件 PDF（回傳 application/pdf 供 iframe 嵌入）"""
+    target_country = _resolve_country(payload, country)
+
+    session = await data_router.get_local_pg(target_country)
+    try:
+        result = await session.execute(
+            select(LocalNotice).where(LocalNotice.notice_id == notice_id)
+        )
+        notice = result.scalar_one_or_none()
+    finally:
+        await session.close()
+
+    if not notice:
+        raise HTTPException(status_code=404, detail="公告不存在")
+
+    files = notice.files or []
+    if not files:
+        raise HTTPException(status_code=404, detail="此公告沒有附件")
+
+    # 決定要預覽哪個檔案
+    if filename:
+        file_entry = next((f for f in files if f.get("name") == filename), None)
+        if not file_entry:
+            raise HTTPException(status_code=404, detail=f"找不到附件：{filename}")
+        target_filename = filename
+    else:
+        file_entry = files[0]
+        target_filename = file_entry.get("name", "attachment")
+
+    file_path = storage_service.get_file_path(target_country, "announcements", notice_id, target_filename)
+    if not file_path:
+        raise HTTPException(status_code=404, detail="附件檔案不存在")
+
+    return FileResponse(
+        path=str(file_path),
+        filename=target_filename,
+        media_type="application/pdf",
+    )
 
 
 def _notice_to_response(notice: LocalNotice) -> AnnouncementResponse:

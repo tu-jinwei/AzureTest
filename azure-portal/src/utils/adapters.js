@@ -58,16 +58,21 @@ export function isWithinDays(isoString, days = 7) {
 export function adaptAnnouncement(apiData) {
   if (!apiData) return null;
 
-  // attachment：從 files JSONB 陣列取第一個檔案
-  let attachment = null;
+  // attachments：完整附件列表
+  const attachments = [];
   if (Array.isArray(apiData.files) && apiData.files.length > 0) {
-    const file = apiData.files[0];
-    attachment = {
-      name: file.name || file.original_name || '',
-      coverUrl: file.cover_url || file.coverUrl || '',
-      pdfUrl: file.file_url || file.pdfUrl || '#',
-    };
+    apiData.files.forEach((file) => {
+      attachments.push({
+        name: file.name || file.original_name || '',
+        coverUrl: file.cover_url || file.coverUrl || '',
+        pdfUrl: file.file_url || file.pdfUrl || '#',
+        fileSize: file.file_size || 0,
+      });
+    });
   }
+
+  // 向後相容：attachment 取第一個
+  const attachment = attachments.length > 0 ? attachments[0] : null;
 
   return {
     id: apiData.notice_id,
@@ -77,6 +82,7 @@ export function adaptAnnouncement(apiData) {
     isNew: isWithinDays(apiData.created_at, 7),
     publish_status: apiData.publish_status ?? 'draft',
     attachment,
+    attachments, // 多附件陣列
   };
 }
 
@@ -151,12 +157,16 @@ export function adaptAgents(apiDataList) {
 export function adaptLibraryDoc(apiData) {
   if (!apiData) return null;
 
+  const files = Array.isArray(apiData.files) ? apiData.files : [];
+
   return {
     id: apiData.doc_id,
     name: apiData.name ?? '',
     description: apiData.description ?? '',
     coverUrl: '/mock-doc-cover.png', // 後端無封面，使用前端預設圖
     pdfUrl: apiData.file_url || '#',
+    hasFile: !!apiData.file_url || files.length > 0, // 是否有上傳檔案
+    files, // 多檔案資訊陣列 [{ filename, relative_path, file_size }]
     _libraryName: apiData.library_name ?? '', // 內部欄位，供 adaptLibraryDocs 分組用
   };
 }

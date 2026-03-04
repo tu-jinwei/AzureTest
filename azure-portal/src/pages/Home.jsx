@@ -1,63 +1,148 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Modal, Button, Tag, Spin } from 'antd';
+import { Modal, Button, Tag, Spin, message, Select } from 'antd';
 import {
   SoundOutlined,
   RobotOutlined,
   BookOutlined,
   FilePdfOutlined,
   LinkOutlined,
+  DownloadOutlined,
+  PaperClipOutlined,
+  EyeOutlined,
+  LoadingOutlined,
+  FileOutlined,
 } from '@ant-design/icons';
 import { announcementAPI, agentAPI, libraryAPI } from '../services/api';
 import { adaptAnnouncements, adaptAgents, adaptLibraryDocs } from '../utils/adapters';
 import { announcements as mockAnnouncements, agents as mockAgents, libraries as mockLibraries } from '../data/mockData';
+import { useCountry } from '../contexts/CountryContext';
 import './Home.css';
 
 const Home = () => {
   const navigate = useNavigate();
-  const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
+  const { effectiveCountry } = useCountry();
 
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
   const [announcements, setAnnouncements] = useState([]);
   const [agents, setAgents] = useState([]);
   const [libraries, setLibraries] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // PDF 預覽狀態
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewFilename, setPreviewFilename] = useState(null);
+
+  const fetchData = async (country) => {
+    setLoading(true);
+
+    // 公告
+    try {
+      const res = await announcementAPI.list(country);
+      setAnnouncements(adaptAnnouncements(res.data));
+    } catch (err) {
+      console.warn('公告 API 失敗，使用 mock 資料', err);
+      setAnnouncements(mockAnnouncements);
+    }
+
+    // Agent（全球共用，不受國家影響）
+    try {
+      const res = await agentAPI.list();
+      setAgents(adaptAgents(res.data));
+    } catch (err) {
+      console.warn('Agent API 失敗，使用 mock 資料', err);
+      setAgents(mockAgents);
+    }
+
+    // 圖書館
+    try {
+      const res = await libraryAPI.list(country);
+      setLibraries(adaptLibraryDocs(res.data));
+    } catch (err) {
+      console.warn('圖書館 API 失敗，使用 mock 資料', err);
+      setLibraries(mockLibraries);
+    }
+
+    setLoading(false);
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    fetchData(effectiveCountry);
+  }, [effectiveCountry]);
 
-      // 公告
-      try {
-        const res = await announcementAPI.list();
-        setAnnouncements(adaptAnnouncements(res.data));
-      } catch (err) {
-        console.warn('公告 API 失敗，使用 mock 資料', err);
-        setAnnouncements(mockAnnouncements);
+  // 載入公告附件 PDF 預覽
+  const loadAnnouncementPreview = useCallback(async (announcement, filename) => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+
+    if (!announcement?.attachments?.length) return;
+
+    setPreviewLoading(true);
+    setPreviewFilename(filename || null);
+    try {
+      const res = await announcementAPI.preview(announcement.id, effectiveCountry, filename);
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      setPreviewUrl(url);
+    } catch (err) {
+      console.error('PDF 預覽載入失敗:', err);
+      setPreviewUrl(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [previewUrl, effectiveCountry]);
+
+  // 選擇公告時自動載入預覽
+  useEffect(() => {
+    if (selectedAnnouncement?.attachments?.length > 0) {
+      loadAnnouncementPreview(selectedAnnouncement);
+    }
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
       }
-
-      // Agent
-      try {
-        const res = await agentAPI.list();
-        setAgents(adaptAgents(res.data));
-      } catch (err) {
-        console.warn('Agent API 失敗，使用 mock 資料', err);
-        setAgents(mockAgents);
-      }
-
-      // 圖書館
-      try {
-        const res = await libraryAPI.list();
-        setLibraries(adaptLibraryDocs(res.data));
-      } catch (err) {
-        console.warn('圖書館 API 失敗，使用 mock 資料', err);
-        setLibraries(mockLibraries);
-      }
-
-      setLoading(false);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAnnouncement?.id]);
 
-    fetchData();
-  }, []);
+  // 關閉公告 Modal
+  const handleCloseAnnouncement = () => {
+    setSelectedAnnouncement(null);
+    setPreviewFilename(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+  };
+
+  // 下載公告附件
+  const handleDownloadAttachment = async (announcement, filename) => {
+    try {
+      const res = await announcementAPI.download(announcement.id, effectiveCountry, filename);
+      let downloadName = filename || announcement.attachment?.name || 'attachment';
+      const disposition = res.headers['content-disposition'];
+      if (disposition) {
+        const utf8Match = disposition.match(/filename\*=utf-8''(.+)/i);
+        const plainMatch = disposition.match(/filename="?([^";\n]+)"?/i);
+        if (utf8Match) downloadName = decodeURIComponent(utf8Match[1]);
+        else if (plainMatch) downloadName = plainMatch[1];
+      }
+      const blob = new Blob([res.data]);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = downloadName;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      message.error('下載失敗：' + (err.response?.data?.detail || err.message));
+    }
+  };
 
   if (loading) {
     return (
@@ -89,8 +174,14 @@ const Home = () => {
               {item.isNew && <Tag color="red" className="announcement-new-tag">NEW</Tag>}
               <span className="announcement-date">{item.date}</span>
               <span className="announcement-subject">{item.subject}</span>
+              {item.attachments?.length > 0 && (
+                <PaperClipOutlined style={{ color: '#999', marginLeft: 4 }} />
+              )}
             </div>
           ))}
+          {announcements.filter((a) => a.isNew).length === 0 && (
+            <div style={{ color: '#999', padding: '12px 0' }}>目前沒有新公告</div>
+          )}
         </div>
       </div>
 
@@ -98,33 +189,112 @@ const Home = () => {
       <Modal
         title={selectedAnnouncement?.subject}
         open={!!selectedAnnouncement}
-        onCancel={() => setSelectedAnnouncement(null)}
+        onCancel={handleCloseAnnouncement}
         footer={[
-          <Button key="close" onClick={() => setSelectedAnnouncement(null)}>
+          // 多附件下載
+          selectedAnnouncement?.attachments?.length > 1 ? (
+            <Select
+              key="file-download"
+              placeholder="選擇要下載的附件"
+              style={{ width: 220, marginRight: 8, textAlign: 'left' }}
+              onSelect={(filename) => handleDownloadAttachment(selectedAnnouncement, filename)}
+              options={selectedAnnouncement.attachments.map((a) => ({
+                value: a.name,
+                label: (
+                  <span>
+                    <FilePdfOutlined style={{ marginRight: 4, color: '#e74c3c' }} />
+                    {a.name} {a.fileSize ? `(${(a.fileSize / 1024 / 1024).toFixed(1)} MB)` : ''}
+                  </span>
+                ),
+              }))}
+            />
+          ) : selectedAnnouncement?.attachments?.length === 1 ? (
+            <Button
+              key="download"
+              type="primary"
+              icon={<DownloadOutlined />}
+              style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
+              onClick={() => handleDownloadAttachment(selectedAnnouncement)}
+            >
+              下載附件
+            </Button>
+          ) : null,
+          <Button key="close" onClick={handleCloseAnnouncement}>
             關閉
           </Button>,
         ]}
-        width={600}
+        width={800}
+        styles={{ body: { maxHeight: '75vh', overflow: 'auto' } }}
       >
         {selectedAnnouncement && (
           <div className="announcement-modal-content">
             <p className="announcement-modal-text">
               {selectedAnnouncement.content}
             </p>
-            {selectedAnnouncement.attachment && (
+
+            {/* PDF 預覽區域 */}
+            {selectedAnnouncement.attachments?.length > 0 ? (
+              <div className="announcement-modal-attachment-area">
+                {previewLoading ? (
+                  <div className="announcement-preview-placeholder">
+                    <Spin indicator={<LoadingOutlined style={{ fontSize: 36 }} spin />} />
+                    <p>載入 PDF 預覽中...</p>
+                  </div>
+                ) : previewUrl ? (
+                  <iframe
+                    src={previewUrl}
+                    className="announcement-preview-iframe"
+                    title="PDF Preview"
+                  />
+                ) : (
+                  <div className="announcement-preview-placeholder">
+                    <FilePdfOutlined style={{ fontSize: 48, color: '#e74c3c' }} />
+                    <p>無法載入預覽</p>
+                  </div>
+                )}
+
+                {/* 多附件切換列表 */}
+                {selectedAnnouncement.attachments.length > 1 && (
+                  <div className="announcement-file-list">
+                    <strong style={{ marginBottom: 8, display: 'block' }}>
+                      <FileOutlined style={{ marginRight: 4 }} />
+                      附件列表（{selectedAnnouncement.attachments.length} 個檔案）
+                    </strong>
+                    <div className="announcement-file-tags">
+                      {selectedAnnouncement.attachments.map((a, i) => (
+                        <Tag
+                          key={i}
+                          color={previewFilename === a.name || (!previewFilename && i === 0) ? 'blue' : 'default'}
+                          className="announcement-file-tag"
+                          onClick={() => loadAnnouncementPreview(selectedAnnouncement, a.name)}
+                        >
+                          <FilePdfOutlined style={{ marginRight: 4 }} />
+                          {a.name}
+                          {a.fileSize ? (
+                            <span className="announcement-file-size">
+                              ({(a.fileSize / 1024 / 1024).toFixed(1)} MB)
+                            </span>
+                          ) : null}
+                        </Tag>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 單附件顯示檔名 */}
+                {selectedAnnouncement.attachments.length === 1 && (
+                  <div className="announcement-single-file">
+                    <PaperClipOutlined style={{ marginRight: 4 }} />
+                    {selectedAnnouncement.attachments[0].name}
+                  </div>
+                )}
+              </div>
+            ) : (
               <div className="announcement-modal-attachment">
-                <div className="attachment-cover">
-                  <FilePdfOutlined style={{ fontSize: 48, color: '#e74c3c' }} />
-                  <p>{selectedAnnouncement.attachment.name}</p>
+                <div style={{ color: '#999', padding: '12px 0' }}>
+                  <PaperClipOutlined style={{ marginRight: 4 }} />
+                  此公告沒有附件
                 </div>
-                <Button
-                  type="primary"
-                  icon={<LinkOutlined />}
-                  style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
-                  onClick={() => window.open(selectedAnnouncement.attachment.pdfUrl, '_blank')}
-                >
-                  查看 PDF
-                </Button>
               </div>
             )}
           </div>
@@ -187,6 +357,9 @@ const Home = () => {
               <div className="library-preview-name">檔名：{doc.name}</div>
             </div>
           ))}
+          {(!libraries[0] || libraries[0].documents.length === 0) && (
+            <div style={{ color: '#999', padding: '12px 0' }}>目前沒有圖書館文件</div>
+          )}
         </div>
       </div>
     </div>

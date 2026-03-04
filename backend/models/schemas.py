@@ -137,6 +137,7 @@ class LibraryDocResponse(BaseModel):
     name: str
     description: Optional[str] = None
     file_url: Optional[str] = None
+    files: List[Dict[str, Any]] = []
     auth_rules: Dict[str, Any] = {}
     created_at: Optional[datetime] = None
 
