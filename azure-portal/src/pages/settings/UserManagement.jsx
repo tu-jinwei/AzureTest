@@ -11,6 +11,7 @@ import {
   message,
   Space,
   Badge,
+  Tooltip,
 } from 'antd';
 import {
   PlusOutlined,
@@ -20,8 +21,10 @@ import {
   CheckCircleOutlined,
   TeamOutlined,
   SearchOutlined,
+  LockOutlined,
 } from '@ant-design/icons';
 import { userAPI } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { adaptUsers, toUserCreate } from '../../utils/adapters';
 import {
   userList as mockUserList,
@@ -29,10 +32,13 @@ import {
   ROLE_LABELS,
   ROLE_COLORS,
   countries,
+  canOperateUser,
+  getAssignableRoles as getAssignableRolesFallback,
 } from '../../data/mockData';
 import '../Settings.css';
 
 const UserManagement = () => {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -40,7 +46,28 @@ const UserManagement = () => {
   const [searchText, setSearchText] = useState('');
   const [filterRole, setFilterRole] = useState(null);
   const [filterCountry, setFilterCountry] = useState(null);
+  const [assignableRoles, setAssignableRoles] = useState([]);
   const [form] = Form.useForm();
+
+  // 當前使用者的角色和 email
+  const myRole = currentUser?.role || 'user';
+  const myEmail = currentUser?.email || '';
+
+  // ===== 載入可指派角色列表 =====
+  const fetchAssignableRoles = useCallback(async () => {
+    try {
+      const res = await userAPI.getAssignableRoles();
+      setAssignableRoles(
+        res.data.map((r) => ({
+          value: r.value,
+          label: r.label,
+        }))
+      );
+    } catch (err) {
+      console.warn('取得可指派角色失敗，使用前端 fallback', err);
+      setAssignableRoles(getAssignableRolesFallback(myRole));
+    }
+  }, [myRole]);
 
   // ===== 資料載入 =====
   const fetchUsers = useCallback(async (filters = {}) => {
@@ -58,7 +85,8 @@ const UserManagement = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, [fetchUsers]);
+    fetchAssignableRoles();
+  }, [fetchUsers, fetchAssignableRoles]);
 
   // ===== 搜尋/篩選 =====
   const handleSearch = (value) => {
@@ -88,16 +116,29 @@ const UserManagement = () => {
     });
   };
 
+  // ===== 檢查是否可操作目標使用者 =====
+  const canOperate = (record) => {
+    return canOperateUser(myRole, myEmail, record.role, record.email);
+  };
+
   // ===== 新增使用者 =====
   const handleAdd = () => {
     setEditingUser(null);
     form.resetFields();
-    form.setFieldsValue({ role: ROLES.USER, status: 'active' });
+    // 預設角色為可指派角色中等級最低的
+    const defaultRole = assignableRoles.length > 0
+      ? assignableRoles[assignableRoles.length - 1].value
+      : ROLES.USER;
+    form.setFieldsValue({ role: defaultRole, status: 'active' });
     setModalOpen(true);
   };
 
   // ===== 編輯使用者 =====
   const handleEdit = (record) => {
+    if (!canOperate(record)) {
+      message.warning('權限不足：無法編輯此使用者');
+      return;
+    }
     setEditingUser(record);
     form.setFieldsValue({
       name: record.name,
@@ -195,7 +236,8 @@ const UserManagement = () => {
     return matchSearch && matchRole && matchCountry;
   });
 
-  const roleOptions = Object.entries(ROLE_LABELS).map(([value, label]) => ({
+  // 所有角色選項（用於篩選下拉選單，顯示全部角色）
+  const allRoleOptions = Object.entries(ROLE_LABELS).map(([value, label]) => ({
     value,
     label,
   }));
@@ -209,30 +251,40 @@ const UserManagement = () => {
     {
       title: '使用者',
       key: 'user',
-      render: (_, record) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              background: ROLE_COLORS[record.role] + '30',
-              color: ROLE_COLORS[record.role],
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 16,
-              fontWeight: 600,
-            }}
-          >
-            {record.name.charAt(0).toUpperCase()}
+      render: (_, record) => {
+        const isSelf = myEmail && record.email.toLowerCase() === myEmail.toLowerCase();
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                background: ROLE_COLORS[record.role] + '30',
+                color: ROLE_COLORS[record.role],
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 16,
+                fontWeight: 600,
+              }}
+            >
+              {record.name.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <div style={{ fontWeight: 500 }}>
+                {record.name}
+                {isSelf && (
+                  <Tag color="blue" style={{ marginLeft: 6, fontSize: 11 }}>
+                    本人
+                  </Tag>
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: '#999' }}>{record.email}</div>
+            </div>
           </div>
-          <div>
-            <div style={{ fontWeight: 500 }}>{record.name}</div>
-            <div style={{ fontSize: 12, color: '#999' }}>{record.email}</div>
-          </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       title: '部門',
@@ -255,16 +307,33 @@ const UserManagement = () => {
       dataIndex: 'role',
       key: 'role',
       width: 160,
-      render: (role, record) => (
-        <Select
-          value={role}
-          size="small"
-          style={{ width: 140 }}
-          onChange={(val) => handleRoleChange(record.email, val)}
-          options={roleOptions}
-          popupMatchSelectWidth={false}
-        />
-      ),
+      render: (role, record) => {
+        const operable = canOperate(record);
+        if (!operable) {
+          // 不可操作的使用者：顯示唯讀 Tag
+          return (
+            <Tooltip title="權限不足，無法變更此使用者的角色">
+              <Tag
+                color={ROLE_COLORS[role]}
+                icon={<LockOutlined />}
+                style={{ cursor: 'not-allowed' }}
+              >
+                {ROLE_LABELS[role] || role}
+              </Tag>
+            </Tooltip>
+          );
+        }
+        return (
+          <Select
+            value={role}
+            size="small"
+            style={{ width: 140 }}
+            onChange={(val) => handleRoleChange(record.email, val)}
+            options={assignableRoles}
+            popupMatchSelectWidth={false}
+          />
+        );
+      },
     },
     {
       title: '狀態',
@@ -282,42 +351,61 @@ const UserManagement = () => {
       title: '操作',
       key: 'actions',
       width: 200,
-      render: (_, record) => (
-        <Space>
-          <Button
-            type="text"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-            style={{ color: 'var(--primary-color)' }}
-          >
-            編輯
-          </Button>
-          <Popconfirm
-            title={
-              record.status === 'active'
-                ? '確定要停用此帳號嗎？'
-                : '確定要啟用此帳號嗎？'
-            }
-            onConfirm={() => handleToggleStatus(record.email, record.status)}
-            okText="確定"
-            cancelText="取消"
-          >
-            {record.status === 'active' ? (
-              <Button type="text" danger icon={<StopOutlined />}>
-                停用
-              </Button>
-            ) : (
+      render: (_, record) => {
+        const operable = canOperate(record);
+        return (
+          <Space>
+            <Tooltip title={!operable ? '權限不足' : ''}>
               <Button
                 type="text"
-                icon={<CheckCircleOutlined />}
-                style={{ color: 'var(--primary-color)' }}
+                icon={<EditOutlined />}
+                onClick={() => handleEdit(record)}
+                style={{ color: operable ? 'var(--primary-color)' : '#ccc' }}
+                disabled={!operable}
               >
-                啟用
+                編輯
               </Button>
+            </Tooltip>
+            {operable ? (
+              <Popconfirm
+                title={
+                  record.status === 'active'
+                    ? '確定要停用此帳號嗎？'
+                    : '確定要啟用此帳號嗎？'
+                }
+                onConfirm={() => handleToggleStatus(record.email, record.status)}
+                okText="確定"
+                cancelText="取消"
+              >
+                {record.status === 'active' ? (
+                  <Button type="text" danger icon={<StopOutlined />}>
+                    停用
+                  </Button>
+                ) : (
+                  <Button
+                    type="text"
+                    icon={<CheckCircleOutlined />}
+                    style={{ color: 'var(--primary-color)' }}
+                  >
+                    啟用
+                  </Button>
+                )}
+              </Popconfirm>
+            ) : (
+              <Tooltip title="權限不足">
+                <Button
+                  type="text"
+                  icon={record.status === 'active' ? <StopOutlined /> : <CheckCircleOutlined />}
+                  disabled
+                  style={{ color: '#ccc' }}
+                >
+                  {record.status === 'active' ? '停用' : '啟用'}
+                </Button>
+              </Tooltip>
             )}
-          </Popconfirm>
-        </Space>
-      ),
+          </Space>
+        );
+      },
     },
   ];
 
@@ -343,7 +431,7 @@ const UserManagement = () => {
             value={filterRole}
             onChange={handleFilterRole}
             allowClear
-            options={roleOptions}
+            options={allRoleOptions}
           />
           <Select
             placeholder="篩選國家"
@@ -459,8 +547,17 @@ const UserManagement = () => {
             name="role"
             label="角色"
             rules={[{ required: true, message: '請選擇角色' }]}
+            extra={
+              assignableRoles.length === 0
+                ? '⚠️ 您目前無法指派任何角色'
+                : `可指派角色：${assignableRoles.map((r) => r.label).join('、')}`
+            }
           >
-            <Select placeholder="請選擇角色" options={roleOptions} />
+            <Select
+              placeholder="請選擇角色"
+              options={assignableRoles}
+              notFoundContent="無可指派的角色"
+            />
           </Form.Item>
         </Form>
       </Modal>

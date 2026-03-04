@@ -77,6 +77,9 @@ export const userAPI = {
 
   updateRole: (email, role) =>
     api.patch(`/users/${encodeURIComponent(email)}/role`, { role }),
+
+  getAssignableRoles: () =>
+    api.get('/users/assignable-roles'),
 };
 
 // ===== Agent API =====

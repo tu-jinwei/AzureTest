@@ -23,6 +23,37 @@ export const ROLE_COLORS = {
   [ROLES.USER]: '#95E1D3',
 };
 
+// 角色階層等級（數字越大權限越高）
+export const ROLE_HIERARCHY = {
+  [ROLES.SUPER_ADMIN]: 4,
+  [ROLES.PLATFORM_ADMIN]: 3,
+  [ROLES.USER_MANAGER]: 2,
+  [ROLES.LIBRARY_MANAGER]: 2,
+  [ROLES.USER]: 1,
+};
+
+// 取得角色等級
+export const getRoleLevel = (role) => ROLE_HIERARCHY[role] || 0;
+
+// 檢查操作者是否可以操作目標使用者
+export const canOperateUser = (operatorRole, operatorEmail, targetRole, targetEmail) => {
+  // 不能操作自己
+  if (operatorEmail && targetEmail && operatorEmail.toLowerCase() === targetEmail.toLowerCase()) {
+    return false;
+  }
+  // 不能操作等級 >= 自己的使用者
+  return getRoleLevel(operatorRole) > getRoleLevel(targetRole);
+};
+
+// 取得可指派的角色列表（等級 < 自己的角色）— 前端 fallback 用
+export const getAssignableRoles = (operatorRole) => {
+  const operatorLevel = getRoleLevel(operatorRole);
+  return Object.entries(ROLE_HIERARCHY)
+    .filter(([, level]) => level < operatorLevel)
+    .map(([role]) => ({ value: role, label: ROLE_LABELS[role] }))
+    .sort((a, b) => (ROLE_HIERARCHY[b.value] || 0) - (ROLE_HIERARCHY[a.value] || 0));
+};
+
 // 角色權限定義
 export const ROLE_PERMISSIONS = {
   [ROLES.SUPER_ADMIN]: [
