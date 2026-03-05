@@ -3,18 +3,20 @@ import { MenuOutlined, UserOutlined, TeamOutlined, LogoutOutlined, GlobalOutline
 import { Avatar, Tag, Button, Tooltip, Select } from 'antd';
 import { useAuth } from '../contexts/AuthContext';
 import { useCountry } from '../contexts/CountryContext';
-import { ROLE_LABELS, ROLE_COLORS } from '../data/mockData';
+import { useLanguage } from '../contexts/LanguageContext';
+import { ROLE_COLORS } from '../data/mockData';
 import './TopBar.css';
 
 const TopBar = ({ onToggleSidebar }) => {
   const { user, logout } = useAuth();
   const { countries, selectedCountry, displayCountry, isSuperAdmin, setSelectedCountry } = useCountry();
+  const { t } = useLanguage();
 
-  const roleLabel = user ? (ROLE_LABELS[user.role] || user.role) : '';
+  const roleLabel = user ? (t(`roles.${user.role}`) || user.role) : '';
   const roleColor = user ? (ROLE_COLORS[user.role] || '#999') : '#999';
 
-  // 取得顯示用的國家名稱
-  const countryName = countries.find((c) => c.code === displayCountry)?.name || displayCountry;
+  // 取得顯示用的國家名稱（使用 i18n 翻譯）
+  const countryName = t(`countries.${displayCountry}`) || countries.find((c) => c.code === displayCountry)?.name || displayCountry;
 
   const handleLogout = async () => {
     await logout();
@@ -31,7 +33,7 @@ const TopBar = ({ onToggleSidebar }) => {
         {user && (
           <div className="topbar-team">
             <TeamOutlined style={{ color: 'var(--primary-color)', marginRight: 6 }} />
-            <span className="topbar-team-name">{user.department || ''}</span>
+            <span className="topbar-team-name">{user.department ? (t(`departments.${user.department}`) || user.department) : ''}</span>
           </div>
         )}
       </div>
@@ -43,10 +45,10 @@ const TopBar = ({ onToggleSidebar }) => {
               <Select
                 value={selectedCountry}
                 onChange={setSelectedCountry}
-                placeholder="選擇國家"
+                placeholder={t('topbar.selectCountry')}
                 size="small"
                 style={{ width: 150, marginRight: 8 }}
-                options={countries.map((c) => ({ value: c.code, label: `${c.name} (${c.code})` }))}
+                options={countries.map((c) => ({ value: c.code, label: `${t(`countries.${c.code}`) || c.name} (${c.code})` }))}
                 className="topbar-country-select"
               />
             ) : (
@@ -66,7 +68,7 @@ const TopBar = ({ onToggleSidebar }) => {
               </Tag>
             </div>
             <Avatar size={36} icon={<UserOutlined />} className="topbar-avatar" />
-            <Tooltip title="登出">
+            <Tooltip title={t('topbar.logout')}>
               <Button
                 type="text"
                 icon={<LogoutOutlined />}

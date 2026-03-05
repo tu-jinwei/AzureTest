@@ -63,5 +63,15 @@ class StorageService:
             return True
         return False
 
+    def delete_single_file(self, country_code: str, category: str, item_id: str, filename: str) -> bool:
+        """刪除指定的單一檔案（不是整個目錄）"""
+        file_path = self._get_dir(country_code, category, item_id) / filename
+        if file_path.is_file():
+            os.remove(file_path)
+            logger.info(f"單一檔案已刪除: {file_path}")
+            return True
+        logger.warning(f"檔案不存在，無法刪除: {file_path}")
+        return False
+
 
 storage_service = StorageService()

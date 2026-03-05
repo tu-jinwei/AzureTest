@@ -19,9 +19,11 @@ import {
 import { agentAPI } from '../../services/api';
 import { adaptAgents } from '../../utils/adapters';
 import { agents as mockAgents, userList } from '../../data/mockData';
+import { useLanguage } from '../../contexts/LanguageContext';
 import '../Settings.css';
 
 const AgentPermissions = () => {
+  const { t } = useLanguage();
   const [agentData, setAgentData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [transferModal, setTransferModal] = useState(null);
@@ -58,20 +60,20 @@ const AgentPermissions = () => {
   const handlePublishToggle = async (agentId, checked) => {
     try {
       await agentAPI.updatePublish(agentId, checked);
-      message.success(checked ? 'Agent 已上架' : 'Agent 已下架');
+      message.success(checked ? t('agentPermissions.agentOnline') : t('agentPermissions.agentOffline'));
       fetchAgents();
     } catch (err) {
-      message.error('操作失敗：' + (err.response?.data?.detail || err.message));
+      message.error(t('agentPermissions.operationFailed') + '：' + (err.response?.data?.detail || err.message));
     }
   };
 
   const handleACLUpdate = async (agentId, aclData) => {
     try {
       await agentAPI.updateACL(agentId, aclData);
-      message.success('Agent 授權規則已更新');
+      message.success(t('agentPermissions.aclUpdated'));
       fetchAgents();
     } catch (err) {
-      message.error('更新失敗：' + (err.response?.data?.detail || err.message));
+      message.error(t('agentPermissions.updateFailed') + '：' + (err.response?.data?.detail || err.message));
     }
   };
 
@@ -88,7 +90,7 @@ const AgentPermissions = () => {
           : a
       )
     );
-    message.success('使用者權限已更新');
+    message.success(t('agentPermissions.permissionUpdated'));
     setTransferModal(null);
   };
 
@@ -121,30 +123,30 @@ const AgentPermissions = () => {
       ),
     },
     {
-      title: '上架狀態',
+      title: t('agentPermissions.publishStatus'),
       key: 'published',
       width: 120,
       render: (_, record) => (
         <Switch
           checked={record.published}
           onChange={(checked) => handlePublishToggle(record.id, checked)}
-          checkedChildren="上架"
-          unCheckedChildren="下架"
+          checkedChildren={t('agentPermissions.online')}
+          unCheckedChildren={t('agentPermissions.offline')}
         />
       ),
     },
     {
-      title: '已授權使用者',
+      title: t('agentPermissions.authorizedUsers'),
       key: 'users',
       width: 160,
       render: (_, record) => (
         <Badge count={record.assignedUsers.length} style={{ backgroundColor: 'var(--primary-color)' }}>
-          <Tag>{record.assignedUsers.length} / 50 人</Tag>
+          <Tag>{record.assignedUsers.length} / 50 {t('common.person')}</Tag>
         </Badge>
       ),
     },
     {
-      title: '操作',
+      title: t('common.actions'),
       key: 'actions',
       width: 140,
       render: (_, record) => (
@@ -155,7 +157,7 @@ const AgentPermissions = () => {
           onClick={() => openAssignModal(record)}
           style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
         >
-          指派使用者
+          {t('agentPermissions.assignUsers')}
         </Button>
       ),
     },
@@ -163,7 +165,7 @@ const AgentPermissions = () => {
 
   const transferData = userList.map((u) => ({
     key: String(u.id),
-    title: `${u.name} (${u.department})`,
+    title: `${u.name} (${t(`departments.${u.department}`) || u.department})`,
     description: u.email,
   }));
 
@@ -172,7 +174,7 @@ const AgentPermissions = () => {
       <div className="settings-header">
         <h2 className="page-title">
           <SafetyOutlined style={{ marginRight: 8 }} />
-          Agent 權限設定
+          {t('agentPermissions.title')}
         </h2>
       </div>
 
@@ -183,7 +185,7 @@ const AgentPermissions = () => {
           rowKey="id"
           pagination={false}
           loading={loading}
-          locale={{ emptyText: '尚無 Agent' }}
+          locale={{ emptyText: t('agentPermissions.noAgents') }}
         />
       </div>
 
@@ -191,29 +193,29 @@ const AgentPermissions = () => {
         title={
           <span>
             <UserAddOutlined style={{ marginRight: 8 }} />
-            指派使用者 - {transferModal?.name}
+            {t('agentPermissions.assignUsersTitle', { name: transferModal?.name })}
           </span>
         }
         open={!!transferModal}
         onCancel={() => setTransferModal(null)}
         onOk={handleAssignSave}
-        okText="儲存"
-        cancelText="取消"
+        okText={t('common.save')}
+        cancelText={t('common.cancel')}
         width={650}
         okButtonProps={{ style: { background: 'var(--primary-color)', borderColor: 'var(--primary-color)' } }}
       >
         <p style={{ marginBottom: 16, color: '#666' }}>
-          最多可指派 50 位使用者。目前已選擇 {targetKeys.length} 位。
+          {t('agentPermissions.maxUsers', { count: targetKeys.length })}
         </p>
         <Transfer
           dataSource={transferData}
           targetKeys={targetKeys}
           onChange={setTargetKeys}
           render={(item) => item.title}
-          titles={['未授權', '已授權']}
+          titles={[t('agentPermissions.unauthorized'), t('agentPermissions.authorized')]}
           listStyle={{ width: 260, height: 300 }}
           showSearch
-          searchPlaceholder="搜尋使用者..."
+          searchPlaceholder={t('agentPermissions.searchUsers')}
         />
       </Modal>
     </div>

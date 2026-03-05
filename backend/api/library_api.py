@@ -20,6 +20,7 @@ from models.schemas import (
     LibraryAuthUpdate,
     LibraryDocCreate,
     LibraryDocResponse,
+    LibraryDocUpdate,
     MessageResponse,
 )
 from services.storage_service import storage_service
@@ -78,6 +79,36 @@ async def list_library(
             authorized_docs.append(doc)
 
     return [_doc_to_response(d) for d in authorized_docs]
+
+
+@router.get("/latest", response_model=List[LibraryDocResponse])
+async def list_latest_library(
+    limit: int = Query(4, ge=1, le=20, description="回傳筆數"),
+    country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
+    payload: dict = Depends(get_current_user_payload),
+):
+    """取得最新的圖書館文件（按建立時間倒序，供首頁展示）"""
+    email = payload["sub"]
+    role = payload.get("role", "user")
+    target_country = _resolve_country(payload, country)
+
+    session = await data_router.get_local_pg(target_country)
+    try:
+        result = await session.execute(
+            select(LocalLibrary).order_by(LocalLibrary.created_at.desc())
+        )
+        all_docs = result.scalars().all()
+    finally:
+        await session.close()
+
+    # 權限過濾
+    if has_permission(role, "access_all_docs"):
+        filtered = all_docs
+    else:
+        filtered = [d for d in all_docs if _check_doc_auth(d.auth_rules, email, role)]
+
+    # 取前 N 筆
+    return [_doc_to_response(d) for d in filtered[:limit]]
 
 
 @router.get("/all", response_model=List[LibraryDocResponse])
@@ -262,6 +293,193 @@ async def delete_document(
     return MessageResponse(message="文件已刪除")
 
 
+@router.put("/{doc_id}", response_model=MessageResponse)
+async def update_document(
+    doc_id: str,
+    body: LibraryDocUpdate,
+    country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
+    payload: dict = Depends(require_permission("manage_library")),
+):
+    """編輯文件資訊（名稱、描述、館名）"""
+    target_country = _resolve_country(payload, country)
+
+    update_data = {}
+    if body.name is not None:
+        update_data["name"] = body.name
+    if body.description is not None:
+        update_data["description"] = body.description
+    if body.library_name is not None:
+        update_data["library_name"] = body.library_name
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="沒有要更新的欄位")
+
+    session = await data_router.get_local_pg(target_country)
+    try:
+        result = await session.execute(
+            update(LocalLibrary)
+            .where(LocalLibrary.doc_id == doc_id)
+            .values(**update_data)
+        )
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="文件不存在")
+        await session.commit()
+    finally:
+        await session.close()
+
+    return MessageResponse(message="文件資訊已更新")
+
+
+@router.delete("/{doc_id}/file", response_model=MessageResponse)
+async def delete_document_file(
+    doc_id: str,
+    filename: str = Query(..., description="要刪除的附件檔名"),
+    country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
+    payload: dict = Depends(require_permission("manage_library")),
+):
+    """刪除文件的單一附件"""
+    target_country = _resolve_country(payload, country)
+
+    # 取得文件
+    session = await data_router.get_local_pg(target_country)
+    try:
+        result = await session.execute(
+            select(LocalLibrary).where(LocalLibrary.doc_id == doc_id)
+        )
+        doc = result.scalar_one_or_none()
+        if not doc:
+            raise HTTPException(status_code=404, detail="文件不存在")
+
+        current_files = list(doc.files_json or [])
+    finally:
+        await session.close()
+
+    # 找到並移除指定 filename 的 entry
+    file_entry = next((f for f in current_files if f.get("filename") == filename), None)
+    if not file_entry:
+        raise HTTPException(status_code=404, detail=f"找不到附件：{filename}")
+
+    current_files.remove(file_entry)
+
+    # 刪除實體檔案
+    storage_service.delete_single_file(target_country, "library", doc_id, filename)
+
+    # 更新 DB
+    new_file_url = None
+    if current_files:
+        new_file_url = current_files[0].get("relative_path")
+
+    session = await data_router.get_local_pg(target_country)
+    try:
+        await session.execute(
+            update(LocalLibrary)
+            .where(LocalLibrary.doc_id == doc_id)
+            .values(
+                files_json=current_files,
+                file_url=new_file_url,
+                metadata_json={
+                    "file_count": len(current_files),
+                    "total_size": sum(f.get("file_size", 0) for f in current_files),
+                    "original_filename": current_files[0]["filename"] if current_files else None,
+                },
+            )
+        )
+        await session.commit()
+    finally:
+        await session.close()
+
+    return MessageResponse(message=f"附件「{filename}」已刪除")
+
+
+@router.post("/{doc_id}/upload-file", response_model=MessageResponse)
+async def upload_document_file(
+    doc_id: str,
+    request: Request,
+    country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
+    payload: dict = Depends(require_permission("manage_library")),
+):
+    """追加上傳附件到已有文件（支援多檔案）"""
+    target_country = _resolve_country(payload, country)
+
+    # 驗證文件存在
+    session = await data_router.get_local_pg(target_country)
+    try:
+        result = await session.execute(
+            select(LocalLibrary).where(LocalLibrary.doc_id == doc_id)
+        )
+        doc = result.scalar_one_or_none()
+        if not doc:
+            raise HTTPException(status_code=404, detail="文件不存在")
+
+        current_files = list(doc.files_json or [])
+        current_file_url = doc.file_url
+    finally:
+        await session.close()
+
+    # 處理多檔案上傳
+    new_files = []
+    content_type_header = request.headers.get("content-type", "")
+    if "multipart/form-data" in content_type_header:
+        try:
+            form = await request.form()
+            # 取得所有名為 "file" 的上傳檔案
+            uploaded_files = form.getlist("file")
+            if not uploaded_files:
+                single_file = form.get("file")
+                if single_file and hasattr(single_file, 'filename') and single_file.filename:
+                    uploaded_files = [single_file]
+
+            for uploaded_file in uploaded_files:
+                if hasattr(uploaded_file, 'filename') and uploaded_file.filename:
+                    file_result = await storage_service.save_file(
+                        target_country, "library", doc_id, uploaded_file
+                    )
+                    new_files.append({
+                        "filename": file_result["original_filename"],
+                        "relative_path": file_result["relative_path"],
+                        "file_size": file_result["file_size"],
+                    })
+        except Exception as e:
+            logger.warning(f"追加附件上傳失敗: {e}")
+            raise HTTPException(status_code=500, detail=f"檔案上傳失敗: {str(e)}")
+
+    if not new_files:
+        raise HTTPException(status_code=400, detail="未收到任何檔案")
+
+    # 追加到 files_json
+    current_files.extend(new_files)
+
+    # 更新 file_url（如果原本沒有檔案）
+    if not current_file_url and current_files:
+        current_file_url = current_files[0].get("relative_path")
+
+    # 更新 DB
+    session = await data_router.get_local_pg(target_country)
+    try:
+        await session.execute(
+            update(LocalLibrary)
+            .where(LocalLibrary.doc_id == doc_id)
+            .values(
+                file_url=current_file_url,
+                files_json=current_files,
+                metadata_json={
+                    "file_count": len(current_files),
+                    "total_size": sum(f.get("file_size", 0) for f in current_files),
+                    "original_filename": current_files[0]["filename"] if current_files else None,
+                },
+            )
+        )
+        await session.commit()
+    finally:
+        await session.close()
+
+    uploaded_names = [f["filename"] for f in new_files]
+    return MessageResponse(
+        message=f"已追加上傳 {len(new_files)} 個附件",
+        detail=", ".join(uploaded_names),
+    )
+
+
 @router.put("/{doc_id}/auth", response_model=MessageResponse)
 async def update_doc_auth(
     doc_id: str,
@@ -356,7 +574,7 @@ async def preview_document(
     country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
     payload: dict = Depends(get_current_user_payload),
 ):
-    """預覽 PDF（回傳 application/pdf 供 iframe 嵌入）"""
+    """預覽文件（僅支援 PDF，回傳 application/pdf 供 iframe 嵌入）"""
     email = payload["sub"]
     role = payload.get("role", "user")
     target_country = _resolve_country(payload, country)
@@ -392,6 +610,13 @@ async def preview_document(
 
     if not target_filename:
         raise HTTPException(status_code=404, detail="無可預覽的檔案")
+
+    # 僅支援 PDF 預覽
+    if not target_filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支援預覽此檔案格式：{target_filename}（僅支援 PDF）"
+        )
 
     file_path = storage_service.get_file_path(
         target_country, "library", str(doc.doc_id), target_filename

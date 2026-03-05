@@ -15,12 +15,14 @@ import {
   RightOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import './Sidebar.css';
 
 const Sidebar = ({ collapsed }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { hasPermission } = useAuth();
+  const { t } = useLanguage();
   const [expandedMenus, setExpandedMenus] = useState({});
 
   const toggleMenu = (key) => {
@@ -33,38 +35,38 @@ const Sidebar = ({ collapsed }) => {
   // 根據使用者權限動態產生設定子選單
   const settingsChildren = [];
   if (hasPermission('manage_announcements')) {
-    settingsChildren.push({ key: 'announcement-settings', icon: <NotificationOutlined />, label: '公告欄設定', path: '/settings/announcements' });
+    settingsChildren.push({ key: 'announcement-settings', icon: <NotificationOutlined />, label: t('sidebar.announcementSettings'), path: '/settings/announcements' });
   }
   if (hasPermission('manage_agent_permissions')) {
-    settingsChildren.push({ key: 'agent-permissions', icon: <SafetyOutlined />, label: 'Agent 權限設定', path: '/settings/agent-permissions' });
+    settingsChildren.push({ key: 'agent-permissions', icon: <SafetyOutlined />, label: t('sidebar.agentPermissions'), path: '/settings/agent-permissions' });
   }
   if (hasPermission('manage_library')) {
-    settingsChildren.push({ key: 'library-settings', icon: <DatabaseOutlined />, label: '圖書館設定', path: '/settings/library' });
+    settingsChildren.push({ key: 'library-settings', icon: <DatabaseOutlined />, label: t('sidebar.librarySettings'), path: '/settings/library' });
   }
   if (hasPermission('manage_users')) {
-    settingsChildren.push({ key: 'user-management', icon: <TeamOutlined />, label: '使用者管理', path: '/settings/users' });
+    settingsChildren.push({ key: 'user-management', icon: <TeamOutlined />, label: t('sidebar.userManagement'), path: '/settings/users' });
   }
 
   const menuItems = [
     {
       key: 'home',
       icon: <HomeOutlined />,
-      label: 'Home',
+      label: t('sidebar.home'),
       path: '/',
     },
     {
       key: 'agent-store',
       icon: <RobotOutlined />,
-      label: 'Agent Store',
+      label: t('sidebar.agentStore'),
       children: [
-        { key: 'chat', icon: <MessageOutlined />, label: '對話', path: '/agent-store/chat' },
-        { key: 'history', icon: <HistoryOutlined />, label: '對話歷史', path: '/agent-store/history' },
+        { key: 'chat', icon: <MessageOutlined />, label: t('sidebar.chat'), path: '/agent-store/chat' },
+        { key: 'history', icon: <HistoryOutlined />, label: t('sidebar.chatHistory'), path: '/agent-store/history' },
       ],
     },
     {
       key: 'library',
       icon: <BookOutlined />,
-      label: '線上圖書館',
+      label: t('sidebar.library'),
       path: '/library',
     },
     // 只有在有任何設定權限時才顯示設定選單
@@ -73,7 +75,7 @@ const Sidebar = ({ collapsed }) => {
           {
             key: 'settings',
             icon: <SettingOutlined />,
-            label: '設定',
+            label: t('sidebar.settings'),
             children: settingsChildren,
           },
         ]

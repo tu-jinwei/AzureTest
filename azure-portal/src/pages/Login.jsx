@@ -4,6 +4,7 @@ import { Input, Button, message, Typography } from 'antd';
 import { MailOutlined, LockOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { authAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import './Login.css';
 
 const { Title, Text, Link } = Typography;
@@ -11,6 +12,16 @@ const { Title, Text, Link } = Typography;
 const Login = () => {
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuth();
+  // Login 頁面在使用者未登入時，LanguageContext 可能尚未有 user.country
+  // 此時會使用預設語言 (zh-TW)，登入後會自動切換
+  let t;
+  try {
+    const lang = useLanguage();
+    t = lang.t;
+  } catch {
+    // fallback: 如果 LanguageContext 不可用，使用 key 本身
+    t = (key) => key;
+  }
 
   const [step, setStep] = useState(1); // 1: 輸入 Email, 2: 輸入 OTP
   const [email, setEmail] = useState('');
@@ -38,21 +49,21 @@ const Login = () => {
   // Step 1: 取得驗證碼
   const handleRequestOTP = useCallback(async () => {
     if (!email || !email.trim()) {
-      message.warning('請輸入 Email');
+      message.warning(t('login.emailRequired'));
       return;
     }
 
     // 簡單的 email 格式驗證
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
-      message.warning('請輸入有效的 Email 格式');
+      message.warning(t('login.emailInvalid'));
       return;
     }
 
     setLoading(true);
     try {
       const response = await authAPI.requestOTP(email.trim());
-      message.success(response.data.message || 'OTP 已寄送至您的 Email');
+      message.success(response.data.message || t('login.otpSentSuccess'));
       setDetail(response.data.detail || '');
       setStep(2);
       setCountdown(60);
@@ -64,17 +75,17 @@ const Login = () => {
         setOtpCode('');
       }
     } catch (error) {
-      const errorMsg = error.response?.data?.detail || '發送驗證碼失敗，請稍後再試';
+      const errorMsg = error.response?.data?.detail || t('login.sendFailed');
       message.error(errorMsg);
     } finally {
       setLoading(false);
     }
-  }, [email]);
+  }, [email, t]);
 
   // Step 2: 驗證 OTP 並登入
   const handleVerifyOTP = useCallback(async () => {
     if (!otpCode || otpCode.trim().length < 6) {
-      message.warning('請輸入 6 位數驗證碼');
+      message.warning(t('login.otpRequired'));
       return;
     }
 
@@ -85,15 +96,15 @@ const Login = () => {
 
       // 儲存 token 並更新 AuthContext
       login(access_token, user);
-      message.success('登入成功！');
+      message.success(t('login.loginSuccess'));
       navigate('/', { replace: true });
     } catch (error) {
-      const errorMsg = error.response?.data?.detail || '驗證碼錯誤或已過期';
+      const errorMsg = error.response?.data?.detail || t('login.otpError');
       message.error(errorMsg);
     } finally {
       setLoading(false);
     }
-  }, [email, otpCode, login, navigate]);
+  }, [email, otpCode, login, navigate, t]);
 
   // 重新發送驗證碼
   const handleResendOTP = useCallback(async () => {
@@ -102,7 +113,7 @@ const Login = () => {
     setLoading(true);
     try {
       const response = await authAPI.requestOTP(email.trim());
-      message.success(response.data.message || 'OTP 已重新寄送');
+      message.success(response.data.message || t('login.otpResent'));
       setDetail(response.data.detail || '');
       setCountdown(60);
       // 開發模式：後端回傳 dev_otp 時自動填入
@@ -113,12 +124,12 @@ const Login = () => {
         setOtpCode('');
       }
     } catch (error) {
-      const errorMsg = error.response?.data?.detail || '重新發送失敗，請稍後再試';
+      const errorMsg = error.response?.data?.detail || t('login.resendFailed');
       message.error(errorMsg);
     } finally {
       setLoading(false);
     }
-  }, [email, countdown]);
+  }, [email, countdown, t]);
 
   // 返回 Step 1
   const handleBackToEmail = () => {
@@ -142,19 +153,19 @@ const Login = () => {
             <SafetyCertificateOutlined className="login-logo-icon" />
           </div>
           <Title level={3} className="login-title">
-            CTBC AI Portal
+            {t('login.title')}
           </Title>
-          <Text className="login-subtitle">中國信託 AI 智能平台</Text>
+          <Text className="login-subtitle">{t('login.subtitle')}</Text>
         </div>
 
         {/* Step 1: 輸入 Email */}
         {step === 1 && (
           <div className="login-form">
             <div className="login-field">
-              <label className="login-label">Email</label>
+              <label className="login-label">{t('login.emailLabel')}</label>
               <Input
                 size="large"
-                placeholder="請輸入您的 Email"
+                placeholder={t('login.emailPlaceholder')}
                 prefix={<MailOutlined style={{ color: '#bbb' }} />}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -170,7 +181,7 @@ const Login = () => {
               onClick={handleRequestOTP}
               className="login-btn"
             >
-              取得驗證碼
+              {t('login.getOTP')}
             </Button>
           </div>
         )}
@@ -180,14 +191,14 @@ const Login = () => {
           <div className="login-form">
             <div className="login-otp-info">
               <Text type="secondary">
-                驗證碼已寄送至 <strong>{maskedEmail}</strong>
+                {t('login.otpSentTo')} <strong>{maskedEmail}</strong>
               </Text>
             </div>
             <div className="login-field">
-              <label className="login-label">驗證碼</label>
+              <label className="login-label">{t('login.otpLabel')}</label>
               <Input
                 size="large"
-                placeholder="請輸入 6 位數驗證碼"
+                placeholder={t('login.otpPlaceholder')}
                 prefix={<LockOutlined style={{ color: '#bbb' }} />}
                 value={otpCode}
                 onChange={(e) => {
@@ -209,7 +220,7 @@ const Login = () => {
               className="login-btn"
               disabled={otpCode.length < 6}
             >
-              登入
+              {t('login.loginBtn')}
             </Button>
             <div className="login-actions">
               <Link
@@ -218,11 +229,11 @@ const Login = () => {
                 className="login-resend"
               >
                 {countdown > 0
-                  ? `重新發送驗證碼 (${countdown}s)`
-                  : '重新發送驗證碼'}
+                  ? t('login.resendCountdown', { seconds: countdown })
+                  : t('login.resendOTP')}
               </Link>
               <Link onClick={handleBackToEmail} className="login-back">
-                返回
+                {t('common.back')}
               </Link>
             </div>
           </div>
@@ -231,7 +242,7 @@ const Login = () => {
         {/* 開發模式提示 */}
         <div className="login-dev-hint">
           <Text type="secondary" style={{ fontSize: 12 }}>
-            開發模式：OTP 會顯示在後端 console
+            {t('login.devHint')}
           </Text>
           {detail && (
             <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>

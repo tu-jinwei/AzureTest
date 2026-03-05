@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Modal, Button, Pagination, Empty, Spin, message, Tag, Select } from 'antd';
+import { Modal, Button, Pagination, Empty, Spin, message, Tag, List } from 'antd';
 import {
   BookOutlined,
   FilePdfOutlined,
+  FileWordOutlined,
+  FileExcelOutlined,
+  FilePptOutlined,
+  FileTextOutlined,
   DownloadOutlined,
   EyeOutlined,
   LeftOutlined,
@@ -15,12 +19,49 @@ import { libraryAPI } from '../services/api';
 import { adaptLibraryDocs } from '../utils/adapters';
 import { libraries as mockLibraries } from '../data/mockData';
 import { useCountry } from '../contexts/CountryContext';
+import { useLanguage } from '../contexts/LanguageContext';
+import PdfThumbnail from '../components/PdfThumbnail';
 import './Library.css';
+
+/** 判斷檔名是否為 PDF */
+const isPdfFile = (filename) => {
+  if (!filename) return false;
+  return filename.toLowerCase().endsWith('.pdf');
+};
+
+/** 根據檔名取得對應的檔案圖示 */
+const getFileIcon = (filename) => {
+  if (!filename) return <FileOutlined style={{ color: '#999' }} />;
+  const ext = filename.toLowerCase().split('.').pop();
+  switch (ext) {
+    case 'pdf':
+      return <FilePdfOutlined style={{ color: '#e74c3c' }} />;
+    case 'doc':
+    case 'docx':
+    case 'odt':
+    case 'rtf':
+      return <FileWordOutlined style={{ color: '#2b579a' }} />;
+    case 'xls':
+    case 'xlsx':
+    case 'ods':
+    case 'csv':
+      return <FileExcelOutlined style={{ color: '#217346' }} />;
+    case 'ppt':
+    case 'pptx':
+    case 'odp':
+      return <FilePptOutlined style={{ color: '#d24726' }} />;
+    case 'txt':
+      return <FileTextOutlined style={{ color: '#666' }} />;
+    default:
+      return <FileOutlined style={{ color: '#999' }} />;
+  }
+};
 
 const DOCS_PER_PAGE = 4;
 
 const Library = () => {
   const { effectiveCountry } = useCountry();
+  const { t } = useLanguage();
 
   const [libraries, setLibraries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,10 +69,16 @@ const Library = () => {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [pageMap, setPageMap] = useState({});
 
-  // PDF 預覽狀態
+  // PDF 縮圖用的 blob URL
+  const [thumbnailUrl, setThumbnailUrl] = useState(null);
+  const [thumbnailLoading, setThumbnailLoading] = useState(false);
+  // 完整預覽 Modal
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewFilename, setPreviewFilename] = useState(null);
+  // 下載檔案彈窗
+  const [downloadModalOpen, setDownloadModalOpen] = useState(false);
 
   const fetchLibrary = async (country) => {
     setLoading(true);
@@ -54,9 +101,35 @@ const Library = () => {
   const getPage = (libId) => pageMap[libId] || 1;
   const setPage = (libId, page) => setPageMap((prev) => ({ ...prev, [libId]: page }));
 
-  // 載入 PDF 預覽（使用 blob URL）
-  const loadPreview = useCallback(async (doc, filename) => {
-    // 清除舊的 blob URL
+  // 載入 PDF blob URL（用於縮圖）
+  const loadThumbnail = useCallback(async (doc) => {
+    if (thumbnailUrl) {
+      URL.revokeObjectURL(thumbnailUrl);
+      setThumbnailUrl(null);
+    }
+
+    if (!doc?.hasFile) return;
+
+    // 找到第一個 PDF 檔案
+    const firstPdf = doc.files?.find((f) => isPdfFile(f.filename));
+    if (!firstPdf) return;
+
+    setThumbnailLoading(true);
+    try {
+      const res = await libraryAPI.preview(doc.id, effectiveCountry, firstPdf.filename);
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      setThumbnailUrl(url);
+    } catch (err) {
+      console.error('PDF 縮圖載入失敗:', err);
+      setThumbnailUrl(null);
+    } finally {
+      setThumbnailLoading(false);
+    }
+  }, [thumbnailUrl, effectiveCountry]);
+
+  // 載入完整預覽（開新 Modal 時用）
+  const loadFullPreview = useCallback(async (doc, filename) => {
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
@@ -64,42 +137,62 @@ const Library = () => {
 
     if (!doc?.hasFile) return;
 
+    const targetFilename = filename || doc.files?.find((f) => isPdfFile(f.filename))?.filename;
+    if (!targetFilename || !isPdfFile(targetFilename)) return;
+
+    setPreviewFilename(targetFilename);
     setPreviewLoading(true);
-    setPreviewFilename(filename || null);
     try {
-      const res = await libraryAPI.preview(doc.id, effectiveCountry, filename);
+      const res = await libraryAPI.preview(doc.id, effectiveCountry, targetFilename);
       const blob = new Blob([res.data], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       setPreviewUrl(url);
     } catch (err) {
       console.error('PDF 預覽載入失敗:', err);
-      message.error('PDF 預覽載入失敗');
+      message.error(t('libraryPage.pdfPreviewFailed'));
       setPreviewUrl(null);
     } finally {
       setPreviewLoading(false);
     }
-  }, [previewUrl, effectiveCountry]);
+  }, [previewUrl, effectiveCountry, t]);
 
-  // 選擇文件時自動載入預覽
+  // 選擇文件時自動載入縮圖
   useEffect(() => {
     if (selectedDoc?.hasFile) {
-      loadPreview(selectedDoc);
+      loadThumbnail(selectedDoc);
     }
     return () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
+      if (thumbnailUrl) {
+        URL.revokeObjectURL(thumbnailUrl);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDoc?.id]);
 
-  // 關閉 Modal 時清理
-  const handleCloseModal = () => {
-    setSelectedDoc(null);
+  // 點擊縮圖 → 開新的預覽 Modal
+  const handleOpenPreviewModal = (doc, filename) => {
+    setPreviewModalOpen(true);
+    loadFullPreview(doc, filename);
+  };
+
+  // 關閉預覽 Modal
+  const handleClosePreviewModal = () => {
+    setPreviewModalOpen(false);
     setPreviewFilename(null);
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
+    }
+  };
+
+  // 關閉文件 Modal 時清理
+  const handleCloseModal = () => {
+    setSelectedDoc(null);
+    setDownloadModalOpen(false);
+    handleClosePreviewModal();
+    if (thumbnailUrl) {
+      URL.revokeObjectURL(thumbnailUrl);
+      setThumbnailUrl(null);
     }
   };
 
@@ -130,14 +223,14 @@ const Library = () => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
-      message.error('下載失敗：' + (err.response?.data?.detail || err.message));
+      message.error(t('libraryPage.downloadFailed') + '：' + (err.response?.data?.detail || err.message));
     }
   };
 
   if (loading) {
     return (
       <div className="library-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
-        <Spin size="large" tip="載入圖書館資料中..." />
+        <Spin size="large" tip={t('libraryPage.loadingLibrary')} />
       </div>
     );
   }
@@ -153,13 +246,13 @@ const Library = () => {
               onClick={() => setSelectedLibrary(null)}
               style={{ marginRight: 8 }}
             >
-              返回
+              {t('common.back')}
             </Button>
           )}
           <h2 className="page-title" style={{ margin: 0 }}>
             <BookOutlined style={{ marginRight: 8 }} />
-            線上圖書館
-            <span className="section-subtitle">(Online Library)</span>
+            {t('libraryPage.title')}
+            <span className="section-subtitle">{t('libraryPage.subtitle')}</span>
           </h2>
         </div>
       </div>
@@ -168,7 +261,7 @@ const Library = () => {
         /* ===== 館名卡片概覽 ===== */
         <div className="library-grid">
           {libraries.length === 0 && (
-            <Empty description="此國家尚無圖書館文件" style={{ gridColumn: '1 / -1', padding: '40px 0' }} />
+            <Empty description={t('libraryPage.noLibraryForCountry')} style={{ gridColumn: '1 / -1', padding: '40px 0' }} />
           )}
           {libraries.map((lib) => {
             const currentPage = getPage(lib.id);
@@ -183,7 +276,7 @@ const Library = () => {
                 >
                   <BookOutlined style={{ marginRight: 8, color: 'var(--primary-color)' }} />
                   <span className="library-card-name">{lib.name}</span>
-                  <span className="library-card-count">({lib.documents.length} 文件)</span>
+                  <span className="library-card-count">({t('libraryPage.documentsCount', { count: lib.documents.length })})</span>
                 </div>
                 <div className="library-card-docs">
                   {pagedDocs.map((doc) => (
@@ -192,11 +285,12 @@ const Library = () => {
                       className="library-card-doc-item"
                       onClick={() => setSelectedDoc(doc)}
                     >
-                      <FilePdfOutlined style={{ color: '#e74c3c', marginRight: 8 }} />
+                      {getFileIcon(doc.files?.[0]?.filename || doc.name)}
+                      <span style={{ marginRight: 8 }} />
                       <span>{doc.name}</span>
                       {doc.files?.length > 1 && (
                         <Tag size="small" style={{ marginLeft: 6, fontSize: 11 }}>
-                          {doc.files.length} 檔案
+                          {t('libraryPage.filesCount', { count: doc.files.length })}
                         </Tag>
                       )}
                     </div>
@@ -230,13 +324,13 @@ const Library = () => {
                 onClick={() => setSelectedDoc(doc)}
               >
                 <div className="library-doc-card-icon">
-                  <FilePdfOutlined style={{ fontSize: 36, color: '#e74c3c' }} />
+                  {React.cloneElement(getFileIcon(doc.files?.[0]?.filename || doc.name), { style: { fontSize: 36 } })}
                 </div>
                 <div className="library-doc-card-name">{doc.name}</div>
                 <div className="library-doc-card-desc">{doc.description}</div>
                 {doc.files?.length > 1 && (
                   <div className="library-doc-card-badge">
-                    <Tag size="small" color="blue">{doc.files.length} 個檔案</Tag>
+                    <Tag size="small" color="blue">{t('libraryPage.multipleFiles', { count: doc.files.length })}</Tag>
                   </div>
                 )}
               </div>
@@ -245,124 +339,221 @@ const Library = () => {
         </div>
       )}
 
-      {/* ===== PDF 預覽 Modal ===== */}
+      {/* ===== 文件資訊 Modal ===== */}
       <Modal
         title={
           <span>
-            <FilePdfOutlined style={{ marginRight: 8, color: '#e74c3c' }} />
-            {selectedDoc?.name}
+            {selectedDoc && getFileIcon(selectedDoc.files?.[0]?.filename || selectedDoc.name)}
+            <span style={{ marginLeft: 8 }}>{selectedDoc?.name}</span>
           </span>
         }
         open={!!selectedDoc}
         onCancel={handleCloseModal}
         footer={[
-          // 多檔案時顯示下載選單
-          selectedDoc?.files?.length > 1 ? (
-            <Select
-              key="file-download"
-              placeholder="選擇要下載的檔案"
-              style={{ width: 220, marginRight: 8, textAlign: 'left' }}
-              onSelect={(filename) => handleDownload(selectedDoc, filename)}
-              options={selectedDoc.files.map((f) => ({
-                value: f.filename,
-                label: (
-                  <span>
-                    <FilePdfOutlined style={{ marginRight: 4, color: '#e74c3c' }} />
-                    {f.filename} ({(f.file_size / 1024 / 1024).toFixed(1)} MB)
-                  </span>
-                ),
-              }))}
-            />
-          ) : (
+          selectedDoc?.hasFile && (
             <Button
               key="download"
               type="primary"
               icon={<DownloadOutlined />}
-              disabled={!selectedDoc?.hasFile}
-              style={selectedDoc?.hasFile ? { background: 'var(--primary-color)', borderColor: 'var(--primary-color)' } : {}}
-              onClick={() => handleDownload(selectedDoc)}
+              style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
+              onClick={() => {
+                if (selectedDoc.files?.length === 1) {
+                  handleDownload(selectedDoc, selectedDoc.files[0].filename);
+                } else if (selectedDoc.files?.length > 1) {
+                  setDownloadModalOpen(true);
+                } else {
+                  handleDownload(selectedDoc);
+                }
+              }}
             >
-              下載
+              {t('home.downloadFile')}
             </Button>
           ),
           <Button key="close" onClick={handleCloseModal}>
-            關閉
+            {t('common.close')}
           </Button>,
         ]}
-        width={900}
-        styles={{ body: { maxHeight: '75vh', overflow: 'auto' } }}
+        width={560}
       >
         {selectedDoc && (
           <div className="pdf-preview-area">
-            {/* PDF 預覽區域 */}
-            {selectedDoc.hasFile ? (
-              previewLoading ? (
-                <div className="pdf-preview-placeholder">
-                  <Spin indicator={<LoadingOutlined style={{ fontSize: 36 }} spin />} />
-                  <p>載入 PDF 預覽中...</p>
-                </div>
-              ) : previewUrl ? (
-                <iframe
-                  src={previewUrl}
-                  className="pdf-preview-iframe"
-                  title="PDF Preview"
-                />
-              ) : (
-                <div className="pdf-preview-placeholder">
-                  <FilePdfOutlined style={{ fontSize: 48, color: '#e74c3c' }} />
-                  <p>無法載入預覽</p>
-                </div>
-              )
-            ) : (
-              <div className="pdf-preview-placeholder">
-                <EyeOutlined style={{ fontSize: 48, color: '#ccc' }} />
-                <p>尚未上傳檔案</p>
-              </div>
-            )}
-
-            {/* 多檔案切換列表 */}
-            {selectedDoc.files?.length > 1 && (
-              <div className="pdf-file-list">
-                <strong style={{ marginBottom: 8, display: 'block' }}>
-                  <FileOutlined style={{ marginRight: 4 }} />
-                  附件列表（{selectedDoc.files.length} 個檔案）
-                </strong>
-                <div className="pdf-file-tags">
-                  {selectedDoc.files.map((f, i) => (
-                    <Tag
-                      key={i}
-                      color={previewFilename === f.filename || (!previewFilename && i === 0) ? 'blue' : 'default'}
-                      className="pdf-file-tag"
-                      onClick={() => loadPreview(selectedDoc, f.filename)}
-                    >
-                      <FilePdfOutlined style={{ marginRight: 4 }} />
-                      {f.filename}
-                      <span className="pdf-file-size">
-                        ({(f.file_size / 1024 / 1024).toFixed(1)} MB)
-                      </span>
-                    </Tag>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* 文件資訊 */}
             <div className="pdf-preview-info">
-              <p><strong>檔案名稱：</strong>{selectedDoc.name}</p>
-              <p><strong>簡介：</strong>{selectedDoc.description}</p>
+              <p><strong>{t('libraryPage.fileName')}：</strong>{selectedDoc.name}</p>
+              <p><strong>{t('libraryPage.description')}：</strong>{selectedDoc.description}</p>
               <p>
-                <strong>檔案狀態：</strong>
+                <strong>{t('libraryPage.fileStatus')}：</strong>
                 {selectedDoc.hasFile ? (
                   <Tag icon={<CheckCircleOutlined />} color="success">
-                    已上傳{selectedDoc.files?.length > 1 ? ` (${selectedDoc.files.length} 個檔案)` : ''}
+                    {t('libraryPage.uploaded')}{selectedDoc.files?.length > 1 ? ` (${selectedDoc.files.length} ${t('common.files')})` : ''}
                   </Tag>
                 ) : (
-                  <Tag icon={<CloseCircleOutlined />} color="default">未上傳</Tag>
+                  <Tag icon={<CloseCircleOutlined />} color="default">{t('libraryPage.notUploaded')}</Tag>
                 )}
               </p>
             </div>
+
+            {/* 附件區域 — 縮圖封面 */}
+            {selectedDoc.hasFile ? (
+              <div className="pdf-cover">
+                {selectedDoc.files?.some((f) => isPdfFile(f.filename)) ? (
+                  /* PDF 縮圖 */
+                  <>
+                    {thumbnailLoading ? (
+                      <div className="pdf-thumbnail-loading-box">
+                        <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
+                        <span>{t('home.loadingPreview')}</span>
+                      </div>
+                    ) : thumbnailUrl ? (
+                      <PdfThumbnail
+                        url={thumbnailUrl}
+                        width={200}
+                        onClick={() => handleOpenPreviewModal(selectedDoc)}
+                        className="pdf-thumbnail"
+                      />
+                    ) : (
+                      <div className="pdf-thumbnail-fallback">
+                        <FilePdfOutlined style={{ fontSize: 48, color: '#e74c3c' }} />
+                      </div>
+                    )}
+                    <div className="pdf-cover-info">
+                      <span className="pdf-cover-filename">
+                        {selectedDoc.files?.[0]?.filename || selectedDoc.name}
+                      </span>
+                      {selectedDoc.files?.length > 1 && (
+                        <Tag color="blue" style={{ marginTop: 4 }}>
+                          {t('libraryPage.multipleFiles', { count: selectedDoc.files.length })}
+                        </Tag>
+                      )}
+                      <span
+                        className="pdf-cover-hint"
+                        onClick={() => handleOpenPreviewModal(selectedDoc)}
+                      >
+                        <EyeOutlined style={{ marginRight: 4 }} />
+                        {t('home.clickPreviewPdf')}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  /* 非 PDF 檔案 */
+                  <>
+                    {React.cloneElement(
+                      getFileIcon(selectedDoc.files?.[0]?.filename || selectedDoc.name),
+                      { style: { fontSize: 48 } }
+                    )}
+                    <div className="pdf-cover-info">
+                      <span className="pdf-cover-filename">
+                        {selectedDoc.files?.[0]?.filename || selectedDoc.name}
+                      </span>
+                      {selectedDoc.files?.length > 1 && (
+                        <Tag color="blue" style={{ marginTop: 4 }}>
+                          {t('libraryPage.multipleFiles', { count: selectedDoc.files.length })}
+                        </Tag>
+                      )}
+                      <span className="pdf-cover-hint" style={{ color: '#999' }}>
+                        {t('home.formatNotSupported')}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="pdf-cover" style={{ cursor: 'default' }}>
+                <EyeOutlined style={{ fontSize: 48, color: '#ccc' }} />
+                <div className="pdf-cover-info">
+                  <span className="pdf-cover-filename" style={{ color: '#999' }}>{t('libraryPage.noFileUploaded')}</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
+      </Modal>
+
+      {/* ===== PDF 完整預覽 Modal（獨立大視窗） ===== */}
+      <Modal
+        title={
+          <span>
+            <FilePdfOutlined style={{ marginRight: 8, color: '#e74c3c' }} />
+            {t('home.pdfPreview')}
+            {previewFilename && <span style={{ fontWeight: 400, marginLeft: 8, fontSize: 13, color: '#999' }}>{previewFilename}</span>}
+          </span>
+        }
+        open={previewModalOpen}
+        onCancel={handleClosePreviewModal}
+        footer={null}
+        width="90vw"
+        style={{ top: 20 }}
+        styles={{ body: { padding: 0, height: 'calc(90vh - 55px)' } }}
+      >
+        {/* 多 PDF 檔案切換 */}
+        {selectedDoc?.files?.filter((f) => isPdfFile(f.filename)).length > 1 && (
+          <div className="preview-modal-tabs">
+            {selectedDoc.files.filter((f) => isPdfFile(f.filename)).map((f, i) => (
+              <Tag
+                key={i}
+                color={previewFilename === f.filename ? 'blue' : 'default'}
+                className="pdf-file-tag"
+                onClick={() => loadFullPreview(selectedDoc, f.filename)}
+                style={{ cursor: 'pointer' }}
+              >
+                {f.filename}
+              </Tag>
+            ))}
+          </div>
+        )}
+        {previewLoading ? (
+          <div className="preview-modal-loading">
+            <Spin indicator={<LoadingOutlined style={{ fontSize: 48 }} spin />} />
+            <p>{t('home.loadingPdf')}</p>
+          </div>
+        ) : previewUrl ? (
+          <iframe
+            src={previewUrl}
+            className="preview-modal-iframe"
+            title="PDF Full Preview"
+          />
+        ) : (
+          <div className="preview-modal-loading">
+            <FilePdfOutlined style={{ fontSize: 48, color: '#e74c3c' }} />
+            <p>{t('home.cannotLoadPdf')}</p>
+          </div>
+        )}
+      </Modal>
+
+      {/* ===== 下載檔案彈窗 ===== */}
+      <Modal
+        title={
+          <span>
+            <DownloadOutlined style={{ marginRight: 8 }} />
+            {t('home.downloadFile')}
+          </span>
+        }
+        open={downloadModalOpen}
+        onCancel={() => setDownloadModalOpen(false)}
+        footer={[
+          <Button key="close" onClick={() => setDownloadModalOpen(false)}>
+            {t('common.close')}
+          </Button>,
+        ]}
+        width={480}
+      >
+        <List
+          dataSource={selectedDoc?.files || []}
+          renderItem={(item) => (
+            <List.Item
+              className="download-list-item"
+              onClick={() => handleDownload(selectedDoc, item.filename)}
+              style={{ cursor: 'pointer', padding: '12px 16px', borderRadius: 6 }}
+            >
+              <List.Item.Meta
+                avatar={React.cloneElement(getFileIcon(item.filename), { style: { fontSize: 24 } })}
+                title={item.filename}
+                description={item.file_size ? `${(item.file_size / 1024 / 1024).toFixed(1)} MB` : ''}
+              />
+              <DownloadOutlined style={{ fontSize: 18, color: 'var(--primary-color)' }} />
+            </List.Item>
+          )}
+        />
       </Modal>
     </div>
   );

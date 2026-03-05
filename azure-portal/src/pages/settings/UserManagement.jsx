@@ -27,13 +27,14 @@ import {
 import { userAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCountry } from '../../contexts/CountryContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { adaptUsers, toUserCreate } from '../../utils/adapters';
 import {
   userList as mockUserList,
   ROLES,
-  ROLE_LABELS,
   ROLE_COLORS,
   countries as mockCountries,
+  DEPARTMENTS,
   canOperateUser,
   getAssignableRoles as getAssignableRolesFallback,
 } from '../../data/mockData';
@@ -42,6 +43,7 @@ import '../Settings.css';
 const UserManagement = () => {
   const { user: currentUser } = useAuth();
   const { countries: countryList } = useCountry();
+  const { t } = useLanguage();
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -77,6 +79,12 @@ const UserManagement = () => {
       setAssignableRoles(getAssignableRolesFallback(myRole));
     }
   }, [myRole]);
+
+  // 動態翻譯角色 label（語言切換時自動更新，不需重新呼叫 API）
+  const translatedAssignableRoles = assignableRoles.map((r) => ({
+    value: r.value,
+    label: t(`roles.${r.value}`) || r.label,
+  }));
 
   // ===== 資料載入 =====
   const fetchUsers = useCallback(async (filters = {}) => {
@@ -150,7 +158,7 @@ const UserManagement = () => {
   // ===== 編輯使用者 =====
   const handleEdit = (record) => {
     if (!canOperate(record)) {
-      message.warning('權限不足：無法編輯此使用者');
+      message.warning(t('userManagement.cannotEditUser'));
       return;
     }
     setEditingUser(record);
@@ -175,20 +183,20 @@ const UserManagement = () => {
             department: values.department,
             role: values.role,
           });
-          message.success('使用者資料已更新');
+          message.success(t('userManagement.userUpdated'));
           fetchUsers({
             search: searchText || undefined,
             role: filterRole || undefined,
             country: filterCountry || undefined,
           });
         } catch (err) {
-          message.error('更新失敗：' + (err.response?.data?.detail || err.message));
+          message.error(t('userManagement.updateFailed') + '：' + (err.response?.data?.detail || err.message));
         }
       } else {
         // 新增模式 → 呼叫 create API
         try {
           await userAPI.create(toUserCreate(values));
-          message.success('使用者已建立');
+          message.success(t('userManagement.userCreated'));
           fetchUsers({
             search: searchText || undefined,
             role: filterRole || undefined,
@@ -196,9 +204,9 @@ const UserManagement = () => {
           });
         } catch (err) {
           if (err.response?.status === 409) {
-            message.error('此 Email 已存在');
+            message.error(t('userManagement.emailExists'));
           } else {
-            message.error('建立失敗：' + (err.response?.data?.detail || err.message));
+            message.error(t('userManagement.createFailed') + '：' + (err.response?.data?.detail || err.message));
           }
         }
       }
@@ -212,14 +220,14 @@ const UserManagement = () => {
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
     try {
       await userAPI.updateStatus(email, newStatus);
-      message.success(newStatus === 'active' ? '帳號已啟用' : '帳號已停用');
+      message.success(newStatus === 'active' ? t('userManagement.accountEnabled') : t('userManagement.accountDisabled'));
       fetchUsers({
         search: searchText || undefined,
         role: filterRole || undefined,
         country: filterCountry || undefined,
       });
     } catch (err) {
-      message.error('操作失敗：' + (err.response?.data?.detail || err.message));
+      message.error(t('userManagement.operationFailed') + '：' + (err.response?.data?.detail || err.message));
     }
   };
 
@@ -227,14 +235,14 @@ const UserManagement = () => {
   const handleDeleteUser = async (email) => {
     try {
       await userAPI.delete(email);
-      message.success('使用者已永久刪除');
+      message.success(t('userManagement.userDeleted'));
       fetchUsers({
         search: searchText || undefined,
         role: filterRole || undefined,
         country: filterCountry || undefined,
       });
     } catch (err) {
-      message.error('刪除失敗：' + (err.response?.data?.detail || err.message));
+      message.error(t('userManagement.deleteFailed') + '：' + (err.response?.data?.detail || err.message));
     }
   };
 
@@ -242,43 +250,44 @@ const UserManagement = () => {
   const handleRoleChange = async (email, newRole) => {
     try {
       await userAPI.updateRole(email, newRole);
-      message.success('角色已更新');
+      message.success(t('userManagement.roleUpdated'));
       fetchUsers({
         search: searchText || undefined,
         role: filterRole || undefined,
         country: filterCountry || undefined,
       });
     } catch (err) {
-      message.error('角色更新失敗：' + (err.response?.data?.detail || err.message));
+      message.error(t('userManagement.roleUpdateFailed') + '：' + (err.response?.data?.detail || err.message));
     }
   };
 
   // ===== 前端篩選（作為 API 篩選的補充）=====
   const filteredUsers = users.filter((u) => {
+    const deptLabel = t(`departments.${u.department}`) || u.department;
     const matchSearch =
       !searchText ||
       u.name.toLowerCase().includes(searchText.toLowerCase()) ||
       u.email.toLowerCase().includes(searchText.toLowerCase()) ||
-      u.department.includes(searchText);
+      deptLabel.toLowerCase().includes(searchText.toLowerCase());
     const matchRole = !filterRole || u.role === filterRole;
     const matchCountry = !filterCountry || u.country === filterCountry;
     return matchSearch && matchRole && matchCountry;
   });
 
   // 所有角色選項（用於篩選下拉選單，顯示全部角色）
-  const allRoleOptions = Object.entries(ROLE_LABELS).map(([value, label]) => ({
-    value,
-    label,
+  const allRoleOptions = Object.keys(ROLES).map((key) => ({
+    value: ROLES[key],
+    label: t(`roles.${ROLES[key]}`),
   }));
 
   const countryOptions = countries.map((c) => ({
     value: c.code,
-    label: c.name,
+    label: t(`countries.${c.code}`) || c.name,
   }));
 
   const columns = [
     {
-      title: '使用者',
+      title: t('userManagement.user'),
       key: 'user',
       render: (_, record) => {
         const isSelf = myEmail && record.email.toLowerCase() === myEmail.toLowerCase();
@@ -305,7 +314,7 @@ const UserManagement = () => {
                 {record.name}
                 {isSelf && (
                   <Tag color="blue" style={{ marginLeft: 6, fontSize: 11 }}>
-                    本人
+                    {t('common.self')}
                   </Tag>
                 )}
               </div>
@@ -316,23 +325,23 @@ const UserManagement = () => {
       },
     },
     {
-      title: '部門',
+      title: t('userManagement.department'),
       dataIndex: 'department',
       key: 'department',
       width: 120,
+      render: (dept) => t(`departments.${dept}`) || dept,
     },
     {
-      title: '國家',
+      title: t('userManagement.country'),
       dataIndex: 'country',
       key: 'country',
       width: 100,
       render: (code) => {
-        const country = countries.find((c) => c.code === code);
-        return country ? country.name : code;
+        return t(`countries.${code}`) || code;
       },
     },
     {
-      title: '角色',
+      title: t('userManagement.role'),
       dataIndex: 'role',
       key: 'role',
       width: 160,
@@ -341,13 +350,13 @@ const UserManagement = () => {
         if (!operable) {
           // 不可操作的使用者：顯示唯讀 Tag
           return (
-            <Tooltip title="權限不足，無法變更此使用者的角色">
+            <Tooltip title={t('userManagement.cannotChangeRole')}>
               <Tag
                 color={ROLE_COLORS[role]}
                 icon={<LockOutlined />}
                 style={{ cursor: 'not-allowed' }}
               >
-                {ROLE_LABELS[role] || role}
+                {t(`roles.${role}`) || role}
               </Tag>
             </Tooltip>
           );
@@ -358,33 +367,33 @@ const UserManagement = () => {
             size="small"
             style={{ width: 140 }}
             onChange={(val) => handleRoleChange(record.email, val)}
-            options={assignableRoles}
+            options={translatedAssignableRoles}
             popupMatchSelectWidth={false}
           />
         );
       },
     },
     {
-      title: '狀態',
+      title: t('common.status'),
       dataIndex: 'status',
       key: 'status',
       width: 100,
       render: (status) =>
         status === 'active' ? (
-          <Badge status="success" text={<Tag color="green">啟用</Tag>} />
+          <Badge status="success" text={<Tag color="green">{t('common.active')}</Tag>} />
         ) : (
-          <Badge status="error" text={<Tag color="red">停用</Tag>} />
+          <Badge status="error" text={<Tag color="red">{t('common.inactive')}</Tag>} />
         ),
     },
     {
-      title: '操作',
+      title: t('common.actions'),
       key: 'actions',
       width: 280,
       render: (_, record) => {
         const operable = canOperate(record);
         return (
           <Space>
-            <Tooltip title={!operable ? '權限不足' : ''}>
+            <Tooltip title={!operable ? t('common.insufficientPermission') : ''}>
               <Button
                 type="text"
                 icon={<EditOutlined />}
@@ -392,23 +401,23 @@ const UserManagement = () => {
                 style={{ color: operable ? 'var(--primary-color)' : '#ccc' }}
                 disabled={!operable}
               >
-                編輯
+                {t('common.edit')}
               </Button>
             </Tooltip>
             {operable ? (
               <Popconfirm
                 title={
                   record.status === 'active'
-                    ? '確定要停用此帳號嗎？'
-                    : '確定要啟用此帳號嗎？'
+                    ? t('userManagement.confirmDisable')
+                    : t('userManagement.confirmEnable')
                 }
                 onConfirm={() => handleToggleStatus(record.email, record.status)}
-                okText="確定"
-                cancelText="取消"
+                okText={t('common.confirm')}
+                cancelText={t('common.cancel')}
               >
                 {record.status === 'active' ? (
                   <Button type="text" danger icon={<StopOutlined />}>
-                    停用
+                    {t('userManagement.disableAccount')}
                   </Button>
                 ) : (
                   <Button
@@ -416,43 +425,43 @@ const UserManagement = () => {
                     icon={<CheckCircleOutlined />}
                     style={{ color: 'var(--primary-color)' }}
                   >
-                    啟用
+                    {t('userManagement.enableAccount')}
                   </Button>
                 )}
               </Popconfirm>
             ) : (
-              <Tooltip title="權限不足">
+              <Tooltip title={t('common.insufficientPermission')}>
                 <Button
                   type="text"
                   icon={record.status === 'active' ? <StopOutlined /> : <CheckCircleOutlined />}
                   disabled
                   style={{ color: '#ccc' }}
                 >
-                  {record.status === 'active' ? '停用' : '啟用'}
+                  {record.status === 'active' ? t('userManagement.disableAccount') : t('userManagement.enableAccount')}
                 </Button>
               </Tooltip>
             )}
             {operable ? (
               <Popconfirm
-                title="確定要永久刪除此使用者嗎？此操作無法復原！"
+                title={t('userManagement.confirmDelete')}
                 onConfirm={() => handleDeleteUser(record.email)}
-                okText="確定刪除"
-                cancelText="取消"
+                okText={t('userManagement.confirmDeleteBtn')}
+                cancelText={t('common.cancel')}
                 okButtonProps={{ danger: true }}
               >
                 <Button type="text" danger icon={<DeleteOutlined />}>
-                  刪除
+                  {t('common.delete')}
                 </Button>
               </Popconfirm>
             ) : (
-              <Tooltip title="權限不足">
+              <Tooltip title={t('common.insufficientPermission')}>
                 <Button
                   type="text"
                   icon={<DeleteOutlined />}
                   disabled
                   style={{ color: '#ccc' }}
                 >
-                  刪除
+                  {t('common.delete')}
                 </Button>
               </Tooltip>
             )}
@@ -467,11 +476,11 @@ const UserManagement = () => {
       <div className="settings-header">
         <h2 className="page-title">
           <TeamOutlined style={{ marginRight: 8 }} />
-          使用者管理
+          {t('userManagement.title')}
         </h2>
         <div className="settings-actions">
           <Input
-            placeholder="搜尋使用者..."
+            placeholder={t('userManagement.searchPlaceholder')}
             prefix={<SearchOutlined />}
             value={searchText}
             onChange={(e) => handleSearch(e.target.value)}
@@ -479,7 +488,7 @@ const UserManagement = () => {
             allowClear
           />
           <Select
-            placeholder="篩選角色"
+            placeholder={t('userManagement.filterRole')}
             style={{ width: 150 }}
             value={filterRole}
             onChange={handleFilterRole}
@@ -489,7 +498,7 @@ const UserManagement = () => {
           {/* 只有 super_admin 可以篩選國家 */}
           {isSuperAdmin && (
             <Select
-              placeholder="篩選國家"
+              placeholder={t('userManagement.filterCountry')}
               style={{ width: 120 }}
               value={filterCountry}
               onChange={handleFilterCountry}
@@ -506,14 +515,16 @@ const UserManagement = () => {
               borderColor: 'var(--primary-color)',
             }}
           >
-            新增使用者
+            {t('userManagement.addUser')}
           </Button>
         </div>
       </div>
 
       <div className="settings-content">
         <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {Object.entries(ROLE_LABELS).map(([role, label]) => {
+          {Object.keys(ROLES).map((key) => {
+            const role = ROLES[key];
+            const label = t(`roles.${role}`);
             const count = users.filter((u) => u.role === role).length;
             return (
               <Tag
@@ -522,12 +533,12 @@ const UserManagement = () => {
                 style={{ cursor: 'pointer', fontSize: 12 }}
                 onClick={() => handleFilterRole(filterRole === role ? null : role)}
               >
-                {label}: {count} 人
+                {label}: {count} {t('common.person')}
               </Tag>
             );
           })}
           <Tag style={{ fontSize: 12 }}>
-            總計: {users.length} 人 | 啟用: {users.filter((u) => u.status === 'active').length} 人
+            {t('userManagement.totalCount', { total: users.length, active: users.filter((u) => u.status === 'active').length })}
           </Tag>
         </div>
 
@@ -536,7 +547,7 @@ const UserManagement = () => {
           dataSource={filteredUsers}
           rowKey="id"
           pagination={{ pageSize: 10 }}
-          locale={{ emptyText: '尚無使用者' }}
+          locale={{ emptyText: t('userManagement.noUsers') }}
           loading={loading}
         />
       </div>
@@ -546,7 +557,7 @@ const UserManagement = () => {
         title={
           <span>
             <UserSwitchOutlined style={{ marginRight: 8 }} />
-            {editingUser ? '編輯使用者' : '新增使用者'}
+            {editingUser ? t('userManagement.editUser') : t('userManagement.addUser')}
           </span>
         }
         open={modalOpen}
@@ -555,8 +566,8 @@ const UserManagement = () => {
           form.resetFields();
         }}
         onOk={handleSave}
-        okText="儲存"
-        cancelText="取消"
+        okText={t('common.save')}
+        cancelText={t('common.cancel')}
         okButtonProps={{
           style: {
             background: 'var(--primary-color)',
@@ -567,54 +578,62 @@ const UserManagement = () => {
         <Form form={form} layout="vertical">
           <Form.Item
             name="name"
-            label="姓名"
-            rules={[{ required: true, message: '請輸入姓名' }]}
+            label={t('userManagement.nameLabel')}
+            rules={[{ required: true, message: t('userManagement.nameRequired') }]}
           >
-            <Input placeholder="請輸入姓名" />
+            <Input placeholder={t('userManagement.namePlaceholder')} />
           </Form.Item>
           <Form.Item
             name="email"
-            label="Email"
+            label={t('userManagement.emailLabel')}
             rules={[
-              { required: true, message: '請輸入 Email' },
-              { type: 'email', message: '請輸入有效的 Email' },
+              { required: true, message: t('userManagement.emailRequired') },
+              { type: 'email', message: t('userManagement.emailInvalid') },
             ]}
           >
-            <Input placeholder="請輸入 Email" disabled={!!editingUser} />
+            <Input placeholder={t('userManagement.emailPlaceholder')} disabled={!!editingUser} />
           </Form.Item>
           <Form.Item
             name="department"
-            label="部門"
-            rules={[{ required: true, message: '請輸入部門' }]}
+            label={t('userManagement.departmentLabel')}
+            rules={[{ required: true, message: t('userManagement.departmentRequired') }]}
           >
-            <Input placeholder="請輸入部門" />
+            <Select
+              placeholder={t('userManagement.departmentPlaceholder')}
+              options={DEPARTMENTS.map((d) => ({
+                value: d,
+                label: t(`departments.${d}`) || d,
+              }))}
+              showSearch
+              optionFilterProp="label"
+            />
           </Form.Item>
           <Form.Item
             name="country"
-            label="所屬國家"
-            rules={[{ required: true, message: '請選擇所屬國家' }]}
-            extra={!isSuperAdmin ? '非最高管理者只能建立自己國家的使用者' : ''}
+            label={t('userManagement.countryLabel')}
+            rules={[{ required: true, message: t('userManagement.countryRequired') }]}
+            extra={!isSuperAdmin ? t('userManagement.countryHint') : ''}
           >
             <Select
-              placeholder="請選擇所屬國家"
+              placeholder={t('userManagement.countryPlaceholder')}
               options={countryOptions}
               disabled={!!editingUser || !isSuperAdmin}
             />
           </Form.Item>
           <Form.Item
             name="role"
-            label="角色"
-            rules={[{ required: true, message: '請選擇角色' }]}
+            label={t('userManagement.roleLabel')}
+            rules={[{ required: true, message: t('userManagement.roleRequired') }]}
             extra={
-              assignableRoles.length === 0
-                ? '⚠️ 您目前無法指派任何角色'
-                : `可指派角色：${assignableRoles.map((r) => r.label).join('、')}`
+              translatedAssignableRoles.length === 0
+                ? t('userManagement.noAssignableRolesWarning')
+                : t('userManagement.assignableRolesHint', { roles: translatedAssignableRoles.map((r) => r.label).join('、') })
             }
           >
             <Select
-              placeholder="請選擇角色"
-              options={assignableRoles}
-              notFoundContent="無可指派的角色"
+              placeholder={t('userManagement.rolePlaceholder')}
+              options={translatedAssignableRoles}
+              notFoundContent={t('userManagement.noAssignableRoles')}
             />
           </Form.Item>
         </Form>

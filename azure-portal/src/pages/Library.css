@@ -167,52 +167,116 @@
   gap: 16px;
 }
 
-.pdf-preview-placeholder {
-  height: 400px;
-  background: #fafafa;
-  border: 2px dashed var(--border-color);
+/* === 封面模式（初始狀態） === */
+.pdf-cover {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  background: #f8f9fa;
+  border: 1px solid var(--border-color);
   border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.pdf-cover:hover {
+  background: #f0f5ff;
+  border-color: var(--primary-color);
+}
+
+.pdf-cover-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pdf-cover-filename {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.pdf-cover-hint {
+  font-size: 12px;
+  color: var(--primary-color);
+  margin-top: 4px;
+  cursor: pointer;
+}
+
+.pdf-cover-hint:hover {
+  text-decoration: underline;
+}
+
+/* === PDF 縮圖 === */
+.pdf-thumbnail {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.2s;
+}
+
+.pdf-thumbnail:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.pdf-thumbnail-loading-box {
+  width: 200px;
+  height: 140px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #ccc;
+  background: #f5f5f5;
+  border-radius: 6px;
+  color: #999;
+  font-size: 12px;
 }
 
-.pdf-preview-placeholder p {
+.pdf-thumbnail-fallback {
+  width: 200px;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fef0ef;
+  border-radius: 6px;
+}
+
+/* === 獨立預覽 Modal === */
+.preview-modal-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: #fafafa;
+}
+
+.preview-modal-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.preview-modal-loading {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #999;
+}
+
+.preview-modal-loading p {
   font-size: 14px;
   color: var(--text-light);
 }
 
-.pdf-preview-hint {
-  font-size: 12px !important;
-  color: #ccc !important;
-}
-
-/* PDF iframe 預覽 */
-.pdf-preview-iframe {
-  width: 100%;
-  height: 500px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: #fafafa;
-}
-
-/* 多檔案切換列表 */
-.pdf-file-list {
-  padding: 12px 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-}
-
-.pdf-file-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
+/* 多檔案切換 Tag */
 .pdf-file-tag {
   cursor: pointer;
   padding: 4px 10px;
@@ -246,4 +310,14 @@
   font-size: 14px;
   color: var(--text-secondary);
   margin-bottom: 4px;
+}
+
+/* === 下載彈窗列表項 === */
+.download-list-item {
+  transition: background 0.2s;
+  border-radius: 6px;
+}
+
+.download-list-item:hover {
+  background: #f0f5ff;
 }

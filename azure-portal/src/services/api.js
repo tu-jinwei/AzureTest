@@ -160,6 +160,16 @@ export const announcementAPI = {
       headers: { 'Content-Type': 'multipart/form-data' },
       params: { notice_id: noticeId, ...(country ? { country } : {}) },
     }),
+
+  /** 刪除公告的單一附件
+   * @param {string} noticeId - 公告 ID
+   * @param {string} filename - 要刪除的附件檔名
+   * @param {string} [country] - 國家代碼（僅 super_admin 可跨國）
+   */
+  deleteFile: (noticeId, filename, country) =>
+    api.delete(`/announcements/${noticeId}/file`, {
+      params: { filename, ...(country ? { country } : {}) },
+    }),
 };
 
 // ===== 圖書館 API =====
@@ -167,6 +177,18 @@ export const libraryAPI = {
   /** @param {string} [country] - 國家代碼（僅 super_admin 可跨國） */
   list: (country) =>
     api.get('/library', { params: country ? { country } : {} }),
+
+  /** 取得最新的圖書館文件（首頁用，按建立時間倒序）
+   * @param {string} [country] - 國家代碼
+   * @param {number} [limit=4] - 回傳筆數
+   */
+  latest: (country, limit = 4) =>
+    api.get('/library/latest', {
+      params: {
+        ...(country ? { country } : {}),
+        limit,
+      },
+    }),
 
   /** @param {string} [country] - 國家代碼（僅 super_admin 可跨國） */
   listAll: (country) =>
@@ -181,6 +203,35 @@ export const libraryAPI = {
   /** @param {object} [config] - axios config（可含 params.country） */
   delete: (docId, config = {}) =>
     api.delete(`/library/${docId}`, config),
+
+  /** 編輯文件資訊（名稱、描述、館名）
+   * @param {string} docId - 文件 ID
+   * @param {object} data - { name?, description?, library_name? }
+   * @param {string} [country] - 國家代碼（僅 super_admin 可跨國）
+   */
+  update: (docId, data, country) =>
+    api.put(`/library/${docId}`, data, { params: country ? { country } : {} }),
+
+  /** 刪除文件的單一附件
+   * @param {string} docId - 文件 ID
+   * @param {string} filename - 要刪除的附件檔名
+   * @param {string} [country] - 國家代碼（僅 super_admin 可跨國）
+   */
+  deleteFile: (docId, filename, country) =>
+    api.delete(`/library/${docId}/file`, {
+      params: { filename, ...(country ? { country } : {}) },
+    }),
+
+  /** 追加上傳附件到已有文件（支援多檔案）
+   * @param {string} docId - 文件 ID
+   * @param {FormData} formData - 包含 file 的 FormData（可多個）
+   * @param {string} [country] - 國家代碼（僅 super_admin 可跨國）
+   */
+  uploadFile: (docId, formData, country) =>
+    api.post(`/library/${docId}/upload-file`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params: country ? { country } : {},
+    }),
 
   /** @param {string} [country] - 國家代碼（僅 super_admin 可跨國） */
   updateAuth: (docId, authData, country) =>

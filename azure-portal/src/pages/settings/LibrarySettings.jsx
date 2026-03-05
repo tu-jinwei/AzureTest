@@ -25,15 +25,20 @@ import {
   GlobalOutlined,
   FolderAddOutlined,
   FolderOutlined,
+  EditOutlined,
+  PaperClipOutlined,
+  CloudUploadOutlined,
 } from '@ant-design/icons';
 import { libraryAPI } from '../../services/api';
 import { adaptLibraryDocs } from '../../utils/adapters';
 import { libraries as mockLibraries, userList } from '../../data/mockData';
 import { useCountry } from '../../contexts/CountryContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import '../Settings.css';
 
 const LibrarySettings = () => {
   const { effectiveCountry, countries, isSuperAdmin, displayCountry } = useCountry();
+  const { t } = useLanguage();
 
   const [libraries, setLibraries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +54,12 @@ const LibrarySettings = () => {
 
   // 新增館名
   const [newLibraryName, setNewLibraryName] = useState('');
+
+  // 編輯文件 Modal
+  const [editModal, setEditModal] = useState(null); // null 或 doc 物件
+  const [editLoading, setEditLoading] = useState(false);
+  const [editForm] = Form.useForm();
+  const [editFileList, setEditFileList] = useState([]); // 追加上傳的檔案列表
 
   // 從後端載入圖書館資料（列表頁面用）
   const fetchLibrary = async (country) => {
@@ -96,14 +107,14 @@ const LibrarySettings = () => {
     if (!trimmed) return;
     // 檢查是否已存在
     if (modalLibraries.some((lib) => lib.name === trimmed)) {
-      message.warning('此館名已存在');
+      message.warning(t('librarySettings.libraryExists'));
       return;
     }
     // 加入到 modalLibraries 選項中，並設定到表單
     setModalLibraries((prev) => [...prev, { id: `new-${Date.now()}`, name: trimmed, documents: [] }]);
     form.setFieldsValue({ libraryName: trimmed });
     setNewLibraryName('');
-    message.success(`已新增館名「${trimmed}」`);
+    message.success(t('librarySettings.libraryAdded', { name: trimmed }));
   };
 
   const handleOpenUpload = () => {
@@ -153,13 +164,13 @@ const LibrarySettings = () => {
       await libraryAPI.upload(formData, { params });
 
       const fileCount = values.file?.fileList?.length || 0;
-      message.success(`文件已上傳${fileCount > 1 ? `（共 ${fileCount} 個檔案）` : ''}`);
+      message.success(fileCount > 1 ? t('librarySettings.documentUploadedMultiple', { count: fileCount }) : t('librarySettings.documentUploaded'));
       setUploadModal(false);
       form.resetFields();
       fetchLibrary(effectiveCountry);
     } catch (err) {
       if (err.errorFields) return;
-      message.error('上傳失敗：' + (err.response?.data?.detail || err.message));
+      message.error(t('librarySettings.uploadFailed') + '：' + (err.response?.data?.detail || err.message));
     } finally {
       setUploadLoading(false);
     }
@@ -172,10 +183,87 @@ const LibrarySettings = () => {
       } else {
         await libraryAPI.delete(docId);
       }
-      message.success('文件已刪除');
+      message.success(t('librarySettings.documentDeleted'));
       fetchLibrary(effectiveCountry);
     } catch (err) {
-      message.error('刪除失敗：' + (err.response?.data?.detail || err.message));
+      message.error(t('librarySettings.deleteFailed') + '：' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  // ===== 編輯文件 =====
+  const handleOpenEdit = (doc) => {
+    setEditModal(doc);
+    setEditFileList([]);
+    editForm.setFieldsValue({
+      name: doc.name,
+      description: doc.description,
+      libraryName: doc.libraryName,
+    });
+  };
+
+  const handleEditSave = async () => {
+    if (!editModal) return;
+    try {
+      const values = await editForm.validateFields();
+      setEditLoading(true);
+
+      const countryParam = isSuperAdmin ? effectiveCountry : undefined;
+
+      // 更新文件資訊
+      const updateData = {};
+      if (values.name !== editModal.name) updateData.name = values.name;
+      if (values.description !== editModal.description) updateData.description = values.description;
+      if (values.libraryName !== editModal.libraryName) updateData.library_name = values.libraryName;
+
+      if (Object.keys(updateData).length > 0) {
+        await libraryAPI.update(editModal.id, updateData, countryParam);
+      }
+
+      // 追加上傳新檔案
+      if (editFileList.length > 0) {
+        const formData = new FormData();
+        editFileList.forEach((f) => {
+          const file = f.originFileObj || f;
+          formData.append('file', file);
+        });
+        try {
+          await libraryAPI.uploadFile(editModal.id, formData, countryParam);
+          message.success(t('librarySettings.appendUploaded', { count: editFileList.length }));
+        } catch (uploadErr) {
+          console.error('追加上傳失敗', uploadErr);
+          message.warning(t('librarySettings.appendUploadFailed') + '：' + (uploadErr.response?.data?.detail || uploadErr.message));
+        }
+      }
+
+      message.success(t('librarySettings.documentUpdated'));
+      setEditModal(null);
+      setEditFileList([]);
+      editForm.resetFields();
+      fetchLibrary(effectiveCountry);
+    } catch (err) {
+      if (err.errorFields) return;
+      message.error(t('librarySettings.updateFailed') + '：' + (err.response?.data?.detail || err.message));
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleDeleteFile = async (docId, filename) => {
+    try {
+      const countryParam = isSuperAdmin ? effectiveCountry : undefined;
+      await libraryAPI.deleteFile(docId, filename, countryParam);
+      message.success(t('librarySettings.attachmentDeleted', { name: filename }));
+      // 更新 editModal 的附件列表
+      setEditModal((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          files: prev.files.filter((f) => f.filename !== filename),
+        };
+      });
+      fetchLibrary(effectiveCountry);
+    } catch (err) {
+      message.error(t('librarySettings.attachmentDeleteFailed') + '：' + (err.response?.data?.detail || err.message));
     }
   };
 
@@ -193,11 +281,11 @@ const LibrarySettings = () => {
         exception_list: [],
       };
       await libraryAPI.updateAuth(permModal.id, authData);
-      message.success('文件授權已更新');
+      message.success(t('librarySettings.permissionUpdated'));
       setPermModal(null);
       fetchLibrary(effectiveCountry);
     } catch (err) {
-      message.error('更新失敗：' + (err.response?.data?.detail || err.message));
+      message.error(t('librarySettings.updateFailed') + '：' + (err.response?.data?.detail || err.message));
     }
   };
 
@@ -205,10 +293,10 @@ const LibrarySettings = () => {
   const handleDeleteLibrary = async (libraryName) => {
     try {
       await libraryAPI.deleteLibrary(libraryName, isSuperAdmin ? effectiveCountry : undefined);
-      message.success(`館「${libraryName}」已刪除`);
+      message.success(t('librarySettings.libraryDeleted', { name: libraryName }));
       fetchLibrary(effectiveCountry);
     } catch (err) {
-      message.error('刪除失敗：' + (err.response?.data?.detail || err.message));
+      message.error(t('librarySettings.deleteFailed') + '：' + (err.response?.data?.detail || err.message));
     }
   };
 
@@ -218,27 +306,24 @@ const LibrarySettings = () => {
     docCount: lib.documents.length,
   }));
 
+  // 編輯 Modal 中的館名選項（使用當前列表頁面的館名）
+  const editLibraryOptions = libraries.map((lib) => ({ value: lib.name, label: lib.name }));
+
   const columns = [
     {
-      title: '館名',
+      title: t('librarySettings.libraryName'),
       dataIndex: 'libraryName',
       key: 'libraryName',
       width: 160,
       render: (name) => <Tag color="blue">{name}</Tag>,
     },
     {
-      title: '文件名稱',
+      title: t('librarySettings.documentName'),
       dataIndex: 'name',
       key: 'name',
     },
     {
-      title: '簡介',
-      dataIndex: 'description',
-      key: 'description',
-      ellipsis: true,
-    },
-    {
-      title: '檔案',
+      title: t('common.files'),
       dataIndex: 'hasFile',
       key: 'hasFile',
       width: 120,
@@ -247,35 +332,43 @@ const LibrarySettings = () => {
         if (hasFile) {
           return (
             <Tag color="green">
-              已上傳{fileCount > 1 ? ` (${fileCount})` : ''}
+              {t('librarySettings.fileUploaded')}{fileCount > 1 ? ` (${fileCount})` : ''}
             </Tag>
           );
         }
-        return <Tag color="default">未上傳</Tag>;
+        return <Tag color="default">{t('librarySettings.fileNotUploaded')}</Tag>;
       },
     },
     {
-      title: '操作',
+      title: t('common.actions'),
       key: 'actions',
-      width: 200,
+      width: 260,
       render: (_, record) => (
         <Space>
+          <Button
+            type="text"
+            icon={<EditOutlined />}
+            onClick={() => handleOpenEdit(record)}
+            style={{ color: 'var(--primary-color)' }}
+          >
+            {t('common.edit')}
+          </Button>
           <Button
             type="text"
             icon={<SettingOutlined />}
             onClick={() => openPermModal(record)}
             style={{ color: 'var(--primary-color)' }}
           >
-            權限
+            {t('common.permissions')}
           </Button>
           <Popconfirm
-            title="確定要刪除此文件嗎？"
+            title={t('librarySettings.deleteDocument')}
             onConfirm={() => handleDelete(record.id)}
-            okText="確定"
-            cancelText="取消"
+            okText={t('common.confirm')}
+            cancelText={t('common.cancel')}
           >
             <Button type="text" danger icon={<DeleteOutlined />}>
-              刪除
+              {t('common.delete')}
             </Button>
           </Popconfirm>
         </Space>
@@ -288,7 +381,7 @@ const LibrarySettings = () => {
       <div className="settings-header">
         <h2 className="page-title">
           <DatabaseOutlined style={{ marginRight: 8 }} />
-          圖書館設定
+          {t('librarySettings.title')}
         </h2>
         <div className="settings-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Button
@@ -297,7 +390,7 @@ const LibrarySettings = () => {
             onClick={handleOpenUpload}
             style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
           >
-            上傳知識文件
+            {t('librarySettings.uploadDocument')}
           </Button>
         </div>
       </div>
@@ -310,7 +403,7 @@ const LibrarySettings = () => {
             title={
               <span>
                 <FolderOutlined style={{ marginRight: 6 }} />
-                館名管理
+                {t('librarySettings.libraryManagement')}
               </span>
             }
             style={{ marginBottom: 20 }}
@@ -322,7 +415,7 @@ const LibrarySettings = () => {
               pagination={false}
               columns={[
                 {
-                  title: '館名',
+                  title: t('librarySettings.libraryName'),
                   dataIndex: 'name',
                   key: 'name',
                   render: (name) => (
@@ -333,37 +426,37 @@ const LibrarySettings = () => {
                   ),
                 },
                 {
-                  title: '文件數',
+                  title: t('common.documents'),
                   dataIndex: 'docCount',
                   key: 'docCount',
                   width: 100,
                   render: (count) => (
                     <Tag color={count > 0 ? 'blue' : 'default'}>
-                      {count} 個文件
+                      {t('librarySettings.documentCount', { count })}
                     </Tag>
                   ),
                 },
                 {
-                  title: '操作',
+                  title: t('common.actions'),
                   key: 'action',
                   width: 120,
                   render: (_, record) =>
                     record.docCount === 0 ? (
                       <Popconfirm
-                        title={`確定要刪除空館「${record.name}」嗎？`}
+                        title={t('librarySettings.deleteLibraryConfirm', { name: record.name })}
                         onConfirm={() => handleDeleteLibrary(record.name)}
-                        okText="確定刪除"
-                        cancelText="取消"
+                        okText={t('librarySettings.confirmDelete')}
+                        cancelText={t('common.cancel')}
                         okButtonProps={{ danger: true }}
                       >
                         <Button type="text" danger icon={<DeleteOutlined />} size="small">
-                          刪除館
+                          {t('librarySettings.deleteLibraryBtn')}
                         </Button>
                       </Popconfirm>
                     ) : (
-                      <Tooltip title="需先刪除館內所有文件才能刪除此館">
+                      <Tooltip title={t('librarySettings.deleteLibraryDisabledHint')}>
                         <Button type="text" icon={<DeleteOutlined />} size="small" disabled style={{ color: '#ccc' }}>
-                          刪除館
+                          {t('librarySettings.deleteLibraryBtn')}
                         </Button>
                       </Tooltip>
                     ),
@@ -373,20 +466,20 @@ const LibrarySettings = () => {
           </Card>
         )}
 
-        <Spin spinning={loading} tip="載入中...">
+        <Spin spinning={loading} tip={t('common.loading')}>
           <Table
             columns={columns}
             dataSource={allDocs}
             rowKey="id"
             pagination={{ pageSize: 10 }}
-            locale={{ emptyText: '尚無文件' }}
+            locale={{ emptyText: t('librarySettings.noDocuments') }}
           />
         </Spin>
       </div>
 
       {/* 上傳文件 Modal */}
       <Modal
-        title="上傳知識文件"
+        title={t('librarySettings.uploadDocument')}
         open={uploadModal}
         onCancel={() => {
           setUploadModal(false);
@@ -395,8 +488,8 @@ const LibrarySettings = () => {
         }}
         onOk={handleUpload}
         confirmLoading={uploadLoading}
-        okText="上傳"
-        cancelText="取消"
+        okText={t('common.upload')}
+        cancelText={t('common.cancel')}
         okButtonProps={{ style: { background: 'var(--primary-color)', borderColor: 'var(--primary-color)' } }}
       >
         <Form form={form} layout="vertical">
@@ -407,37 +500,37 @@ const LibrarySettings = () => {
               label={
                 <span>
                   <GlobalOutlined style={{ marginRight: 4 }} />
-                  目標國家
+                  {t('announcementSettings.targetCountry')}
                 </span>
               }
-              rules={[{ required: true, message: '請選擇目標國家' }]}
+              rules={[{ required: true, message: t('announcementSettings.targetCountryRequired') }]}
             >
               <Select
-                placeholder="請選擇目標國家"
-                options={countries.map((c) => ({ value: c.code, label: `${c.name} (${c.code})` }))}
+                placeholder={t('announcementSettings.targetCountryPlaceholder')}
+                options={countries.map((c) => ({ value: c.code, label: `${t(`countries.${c.code}`) || c.name} (${c.code})` }))}
                 onChange={handleModalCountryChange}
               />
             </Form.Item>
           )}
           <Form.Item
             name="libraryName"
-            label="館名"
-            rules={[{ required: true, message: '請選擇或輸入館名' }]}
+            label={t('librarySettings.libraryName')}
+            rules={[{ required: true, message: t('librarySettings.libraryNameRequired') }]}
           >
             <Select
-              placeholder={modalLibLoading ? '載入館名中...' : '請選擇館名或新增'}
+              placeholder={modalLibLoading ? t('librarySettings.loadingLibraries') : t('librarySettings.libraryNamePlaceholder')}
               options={modalLibraryOptions}
               loading={modalLibLoading}
               showSearch
               allowClear
-              notFoundContent={modalLibLoading ? <Spin size="small" /> : '此國家尚無館名，請新增'}
+              notFoundContent={modalLibLoading ? <Spin size="small" /> : t('librarySettings.noLibraryForCountry')}
               dropdownRender={(menu) => (
                 <>
                   {menu}
                   <Divider style={{ margin: '8px 0' }} />
                   <div style={{ display: 'flex', gap: 8, padding: '0 8px 8px' }}>
                     <Input
-                      placeholder="輸入新館名"
+                      placeholder={t('librarySettings.newLibraryPlaceholder')}
                       value={newLibraryName}
                       onChange={(e) => setNewLibraryName(e.target.value)}
                       onKeyDown={(e) => e.stopPropagation()}
@@ -449,7 +542,7 @@ const LibrarySettings = () => {
                       onClick={handleAddNewLibrary}
                       style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
                     >
-                      新增
+                      {t('librarySettings.addLibrary')}
                     </Button>
                   </div>
                 </>
@@ -458,31 +551,141 @@ const LibrarySettings = () => {
           </Form.Item>
           <Form.Item
             name="name"
-            label="文件名稱"
-            rules={[{ required: true, message: '請輸入文件名稱' }]}
+            label={t('librarySettings.documentName')}
+            rules={[{ required: true, message: t('librarySettings.documentNameRequired') }]}
           >
-            <Input placeholder="請輸入文件名稱" />
+            <Input placeholder={t('librarySettings.documentNamePlaceholder')} />
           </Form.Item>
           <Form.Item
             name="description"
-            label="簡介"
-            rules={[{ required: true, message: '請輸入文件簡介' }]}
+            label={t('librarySettings.descriptionLabel')}
+            rules={[{ required: true, message: t('librarySettings.descriptionRequired') }]}
           >
-            <Input.TextArea rows={3} placeholder="請輸入文件簡介" />
+            <Input.TextArea rows={3} placeholder={t('librarySettings.descriptionPlaceholder')} />
           </Form.Item>
-          <Form.Item name="file" label="上傳 PDF 檔案" valuePropName="file" extra="可選擇多個檔案，每個檔案上限 100 MB">
+          <Form.Item
+            name="file"
+            label={t('librarySettings.uploadFile')}
+            valuePropName="file"
+            extra={t('librarySettings.uploadFileHint')}
+            getValueFromEvent={(e) => {
+              if (!e || !e.fileList) return e;
+              const totalSize = e.fileList.reduce((sum, f) => sum + (f.originFileObj?.size || f.size || 0), 0);
+              if (totalSize > 100 * 1024 * 1024) {
+                message.error(t('librarySettings.fileSizeExceeded', { size: (totalSize / 1024 / 1024).toFixed(1) }));
+                return { fileList: e.fileList.slice(0, -1) };
+              }
+              return e;
+            }}
+          >
             <Upload
               multiple
-              accept=".pdf"
-              beforeUpload={(file) => {
-                if (file.size > 100 * 1024 * 1024) {
-                  message.error(`${file.name} 超過 100 MB`);
-                  return Upload.LIST_IGNORE;
-                }
-                return false;
-              }}
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp"
+              beforeUpload={() => false}
             >
-              <Button icon={<UploadOutlined />}>選擇檔案</Button>
+              <Button icon={<UploadOutlined />}>{t('common.selectFile')}</Button>
+            </Upload>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 編輯文件 Modal */}
+      <Modal
+        title={t('librarySettings.editDocument')}
+        open={!!editModal}
+        onCancel={() => {
+          setEditModal(null);
+          setEditFileList([]);
+          editForm.resetFields();
+        }}
+        onOk={handleEditSave}
+        confirmLoading={editLoading}
+        okText={t('common.save')}
+        cancelText={t('common.cancel')}
+        okButtonProps={{ style: { background: 'var(--primary-color)', borderColor: 'var(--primary-color)' } }}
+        width={560}
+      >
+        <Form form={editForm} layout="vertical">
+          <Form.Item
+            name="libraryName"
+            label={t('librarySettings.libraryName')}
+            rules={[{ required: true, message: t('librarySettings.libraryNameRequired') }]}
+          >
+            <Select
+              placeholder={t('librarySettings.libraryNamePlaceholder')}
+              options={editLibraryOptions}
+              showSearch
+            />
+          </Form.Item>
+          <Form.Item
+            name="name"
+            label={t('librarySettings.documentName')}
+            rules={[{ required: true, message: t('librarySettings.documentNameRequired') }]}
+          >
+            <Input placeholder={t('librarySettings.documentNamePlaceholder')} />
+          </Form.Item>
+          <Form.Item
+            name="description"
+            label={t('librarySettings.descriptionLabel')}
+          >
+            <Input.TextArea rows={3} placeholder={t('librarySettings.descriptionPlaceholder')} />
+          </Form.Item>
+
+          {/* 已有附件列表 */}
+          {editModal?.files?.length > 0 && (
+            <Form.Item label={t('librarySettings.currentAttachments')}>
+              {editModal.files.map((f) => (
+                <div
+                  key={f.filename}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '6px 10px',
+                    marginBottom: 4,
+                    background: '#f5f5f5',
+                    borderRadius: 4,
+                    fontSize: 13,
+                  }}
+                >
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <PaperClipOutlined style={{ marginRight: 6, color: '#1890ff' }} />
+                    {f.filename}
+                    {f.file_size ? ` (${(f.file_size / 1024).toFixed(0)} KB)` : ''}
+                  </span>
+                  <Popconfirm
+                    title={t('librarySettings.deleteAttachmentConfirm', { name: f.filename })}
+                    onConfirm={() => handleDeleteFile(editModal.id, f.filename)}
+                    okText={t('common.confirm')}
+                    cancelText={t('common.cancel')}
+                  >
+                    <Button type="text" danger icon={<DeleteOutlined />} size="small" />
+                  </Popconfirm>
+                </div>
+              ))}
+            </Form.Item>
+          )}
+
+          {/* 追加上傳新檔案 */}
+          <Form.Item
+            label={t('librarySettings.appendUpload')}
+            extra={t('librarySettings.appendUploadHint')}
+          >
+            <Upload
+              multiple
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp"
+              fileList={editFileList}
+              onChange={({ fileList: newFileList }) => {
+                const totalSize = newFileList.reduce((sum, f) => sum + (f.originFileObj?.size || f.size || 0), 0);
+                if (totalSize > 100 * 1024 * 1024) {
+                  message.error(t('librarySettings.fileSizeExceeded', { size: (totalSize / 1024 / 1024).toFixed(1) }));
+                  return;
+                }
+                setEditFileList(newFileList);
+              }}
+              beforeUpload={() => false}
+            >
+              <Button icon={<CloudUploadOutlined />}>{t('common.selectFile')}</Button>
             </Upload>
           </Form.Item>
         </Form>
@@ -490,26 +693,26 @@ const LibrarySettings = () => {
 
       {/* 權限設定 Modal */}
       <Modal
-        title={`權限設定 - ${permModal?.name}`}
+        title={t('librarySettings.permissionTitle', { name: permModal?.name })}
         open={!!permModal}
         onCancel={() => setPermModal(null)}
         onOk={handlePermSave}
-        okText="儲存"
-        cancelText="取消"
+        okText={t('common.save')}
+        cancelText={t('common.cancel')}
         okButtonProps={{ style: { background: 'var(--primary-color)', borderColor: 'var(--primary-color)' } }}
       >
         <p style={{ marginBottom: 12, color: '#666' }}>
-          選擇可以查看此文件的使用者：
+          {t('librarySettings.permissionHint')}
         </p>
         <Select
           mode="multiple"
           style={{ width: '100%' }}
-          placeholder="選擇使用者"
+          placeholder={t('librarySettings.selectUsers')}
           value={permUsers}
           onChange={setPermUsers}
           options={userList.map((u) => ({
             value: u.id,
-            label: `${u.name} (${u.department})`,
+            label: `${u.name} (${t(`departments.${u.department}`) || u.department})`,
           }))}
         />
       </Modal>

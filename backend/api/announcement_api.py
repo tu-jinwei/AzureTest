@@ -246,6 +246,55 @@ async def upload_announcement_file(
     )
 
 
+@router.delete("/{notice_id}/file", response_model=MessageResponse)
+async def delete_announcement_file(
+    notice_id: str,
+    filename: str = Query(..., description="要刪除的附件檔名"),
+    country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
+    payload: dict = Depends(require_permission("manage_announcements")),
+):
+    """刪除公告的單一附件"""
+    target_country = _resolve_country(payload, country)
+
+    # 取得公告
+    session = await data_router.get_local_pg(target_country)
+    try:
+        result = await session.execute(
+            select(LocalNotice).where(LocalNotice.notice_id == notice_id)
+        )
+        notice = result.scalar_one_or_none()
+        if not notice:
+            raise HTTPException(status_code=404, detail="公告不存在")
+
+        current_files = list(notice.files or [])
+    finally:
+        await session.close()
+
+    # 找到並移除指定 filename 的 entry
+    file_entry = next((f for f in current_files if f.get("name") == filename), None)
+    if not file_entry:
+        raise HTTPException(status_code=404, detail=f"找不到附件：{filename}")
+
+    current_files.remove(file_entry)
+
+    # 刪除實體檔案
+    storage_service.delete_single_file(target_country, "announcements", notice_id, filename)
+
+    # 更新 DB 的 files JSONB
+    session = await data_router.get_local_pg(target_country)
+    try:
+        await session.execute(
+            update(LocalNotice)
+            .where(LocalNotice.notice_id == notice_id)
+            .values(files=current_files)
+        )
+        await session.commit()
+    finally:
+        await session.close()
+
+    return MessageResponse(message=f"附件「{filename}」已刪除")
+
+
 @router.get("/{notice_id}/download")
 async def download_announcement_file(
     notice_id: str,
@@ -300,7 +349,7 @@ async def preview_announcement_file(
     country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
     payload: dict = Depends(get_current_user_payload),
 ):
-    """預覽公告附件 PDF（回傳 application/pdf 供 iframe 嵌入）"""
+    """預覽公告附件（僅支援 PDF，回傳 application/pdf 供 iframe 嵌入）"""
     target_country = _resolve_country(payload, country)
 
     session = await data_router.get_local_pg(target_country)
@@ -328,6 +377,13 @@ async def preview_announcement_file(
     else:
         file_entry = files[0]
         target_filename = file_entry.get("name", "attachment")
+
+    # 僅支援 PDF 預覽
+    if not target_filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支援預覽此檔案格式：{target_filename}（僅支援 PDF）"
+        )
 
     file_path = storage_service.get_file_path(target_country, "announcements", notice_id, target_filename)
     if not file_path:

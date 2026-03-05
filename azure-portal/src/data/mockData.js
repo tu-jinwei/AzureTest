@@ -336,13 +336,24 @@ export const countries = [
   { code: 'PH', name: '菲律賓' },
 ];
 
+// ===== 部門代碼列表 =====
+export const DEPARTMENTS = [
+  'planning',
+  'rd',
+  'marketing',
+  'finance',
+  'hr',
+  'it',
+  'management',
+];
+
 // ===== 使用者資料 =====
 export const currentUser = {
   id: 1,
   name: 'Tina',
   email: 'tina@ctbc.com',
   role: ROLES.PLATFORM_ADMIN,
-  department: '規劃部 / 規劃部',
+  department: 'planning',
   country: 'TW',
   memberCount: 18,
   agentCount: 33,
@@ -350,12 +361,12 @@ export const currentUser = {
 
 // ===== 使用者列表（用於權限設定）=====
 export const userList = [
-  { id: 1, name: 'Tina', email: 'tina@ctbc.com', department: '規劃部', role: ROLES.PLATFORM_ADMIN, country: 'TW', status: 'active' },
-  { id: 2, name: 'John', email: 'john@ctbc.com', department: '研發部', role: ROLES.USER_MANAGER, country: 'TW', status: 'active' },
-  { id: 3, name: 'Alice', email: 'alice@ctbc.com', department: '行銷部', role: ROLES.LIBRARY_MANAGER, country: 'TW', status: 'active' },
-  { id: 4, name: 'Bob', email: 'bob@ctbc.com.sg', department: '財務部', role: ROLES.USER, country: 'SG', status: 'active' },
-  { id: 5, name: 'Carol', email: 'carol@ctbc.com', department: '人資部', role: ROLES.USER, country: 'TW', status: 'active' },
-  { id: 6, name: 'David', email: 'david@ctbc.co.jp', department: '研發部', role: ROLES.USER, country: 'JP', status: 'active' },
-  { id: 7, name: 'Eva', email: 'eva@ctbc.com', department: '規劃部', role: ROLES.USER, country: 'TW', status: 'inactive' },
-  { id: 8, name: 'Frank', email: 'frank@ctbc.co.th', department: '行銷部', role: ROLES.USER, country: 'TH', status: 'active' },
+  { id: 1, name: 'Tina', email: 'tina@ctbc.com', department: 'planning', role: ROLES.PLATFORM_ADMIN, country: 'TW', status: 'active' },
+  { id: 2, name: 'John', email: 'john@ctbc.com', department: 'rd', role: ROLES.USER_MANAGER, country: 'TW', status: 'active' },
+  { id: 3, name: 'Alice', email: 'alice@ctbc.com', department: 'marketing', role: ROLES.LIBRARY_MANAGER, country: 'TW', status: 'active' },
+  { id: 4, name: 'Bob', email: 'bob@ctbc.com.sg', department: 'finance', role: ROLES.USER, country: 'SG', status: 'active' },
+  { id: 5, name: 'Carol', email: 'carol@ctbc.com', department: 'hr', role: ROLES.USER, country: 'TW', status: 'active' },
+  { id: 6, name: 'David', email: 'david@ctbc.co.jp', department: 'rd', role: ROLES.USER, country: 'JP', status: 'active' },
+  { id: 7, name: 'Eva', email: 'eva@ctbc.com', department: 'planning', role: ROLES.USER, country: 'TW', status: 'inactive' },
+  { id: 8, name: 'Frank', email: 'frank@ctbc.co.th', department: 'marketing', role: ROLES.USER, country: 'TH', status: 'active' },
 ];

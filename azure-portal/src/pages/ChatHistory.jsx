@@ -9,9 +9,11 @@ import {
 import { chatAPI } from '../services/api';
 import { adaptChatHistory } from '../utils/adapters';
 import { chatHistory as mockChatHistory, agents } from '../data/mockData';
+import { useLanguage } from '../contexts/LanguageContext';
 import './ChatHistory.css';
 
 const ChatHistory = () => {
+  const { t } = useLanguage();
   const [chatHistory, setChatHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedChat, setSelectedChat] = useState(null);
@@ -42,7 +44,7 @@ const ChatHistory = () => {
   if (loading) {
     return (
       <div className="chat-history-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
-        <Spin size="large" tip="載入對話歷史中..." />
+        <Spin size="large" tip={t('chatHistoryPage.loadingHistory')} />
       </div>
     );
   }
@@ -52,11 +54,11 @@ const ChatHistory = () => {
       <div className="history-header">
         <h2 className="page-title">
           <HistoryOutlined style={{ marginRight: 8 }} />
-          對話歷史
+          {t('chatHistoryPage.title')}
         </h2>
         <div className="history-filters">
           <Input
-            placeholder="搜尋對話..."
+            placeholder={t('chatHistoryPage.searchPlaceholder')}
             prefix={<SearchOutlined />}
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
@@ -64,7 +66,7 @@ const ChatHistory = () => {
             allowClear
           />
           <Select
-            placeholder="篩選 Agent"
+            placeholder={t('chatHistoryPage.filterAgent')}
             style={{ width: 200 }}
             value={filterAgent}
             onChange={setFilterAgent}
@@ -76,7 +78,7 @@ const ChatHistory = () => {
 
       <div className="history-list">
         {filteredHistory.length === 0 ? (
-          <Empty description="沒有找到對話記錄" style={{ marginTop: 60 }} />
+          <Empty description={t('chatHistoryPage.noRecords')} style={{ marginTop: 60 }} />
         ) : (
           filteredHistory.map((chat) => {
             const agent = agents.find((a) => a.id === chat.agentId);

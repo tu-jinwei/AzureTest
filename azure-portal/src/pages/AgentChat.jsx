@@ -4,16 +4,21 @@ import { SendOutlined, RobotOutlined } from '@ant-design/icons';
 import { agentAPI } from '../services/api';
 import { adaptAgents } from '../utils/adapters';
 import { agents as mockAgents } from '../data/mockData';
+import { useLanguage } from '../contexts/LanguageContext';
 import './AgentChat.css';
 
 const { TextArea } = Input;
 
 const AgentChat = () => {
+  const { t, language } = useLanguage();
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
+
+  // 根據語言決定時間格式的 locale
+  const timeLocale = language === 'ja' ? 'ja-JP' : language === 'th' ? 'th-TH' : language === 'vi' ? 'vi-VN' : language === 'en' ? 'en-US' : 'zh-TW';
 
   useEffect(() => {
     const fetchAgents = async () => {
@@ -38,11 +43,11 @@ const AgentChat = () => {
 
   const handleSend = () => {
     if (!inputValue.trim() || !selectedAgent) return;
-    const userMsg = { role: 'user', content: inputValue, time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) };
+    const userMsg = { role: 'user', content: inputValue, time: new Date().toLocaleTimeString(timeLocale, { hour: '2-digit', minute: '2-digit' }) };
     const botMsg = {
       role: 'assistant',
-      content: `您好！我是 ${selectedAgent.name}，已收到您的訊息：「${inputValue}」。這是模擬回覆，實際功能需連接後端 API。`,
-      time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }),
+      content: t('agentChat.mockReply', { name: selectedAgent.name, message: inputValue }),
+      time: new Date().toLocaleTimeString(timeLocale, { hour: '2-digit', minute: '2-digit' }),
     };
     setMessages((prev) => [...prev, userMsg, botMsg]);
     setInputValue('');
@@ -51,7 +56,7 @@ const AgentChat = () => {
   if (loading) {
     return (
       <div className="agent-chat-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
-        <Spin size="large" tip="載入 Agent 列表中..." />
+        <Spin size="large" tip={t('agentChat.loadingAgents')} />
       </div>
     );
   }
@@ -63,7 +68,7 @@ const AgentChat = () => {
         <div className="chat-header">
           <RobotOutlined style={{ fontSize: 20 }} />
           <Select
-            placeholder="請選擇一個 AI 代理"
+            placeholder={t('agentChat.selectAgent')}
             style={{ width: 300 }}
             value={selectedAgent?.id}
             onChange={handleSelectAgent}
@@ -73,9 +78,9 @@ const AgentChat = () => {
 
         <div className="chat-messages">
           {!selectedAgent ? (
-            <Empty description="請先從右側選擇一個 Agent 開始對話" style={{ marginTop: 100 }} />
+            <Empty description={t('agentChat.selectAgentFirst')} style={{ marginTop: 100 }} />
           ) : messages.length === 0 ? (
-            <Empty description={`已選擇 ${selectedAgent.name}，請開始對話`} style={{ marginTop: 100 }} />
+            <Empty description={t('agentChat.selectedAgent', { name: selectedAgent.name })} style={{ marginTop: 100 }} />
           ) : (
             messages.map((msg, idx) => (
               <div key={idx} className={`chat-message ${msg.role}`}>
@@ -90,7 +95,7 @@ const AgentChat = () => {
 
         <div className="chat-input-area">
           <TextArea
-            placeholder={selectedAgent ? `向 ${selectedAgent.name} 發送訊息...` : '請先選擇一個 Agent'}
+            placeholder={selectedAgent ? t('agentChat.sendMessage', { name: selectedAgent.name }) : t('agentChat.selectAgentPlaceholder')}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onPressEnter={(e) => {
@@ -109,7 +114,7 @@ const AgentChat = () => {
             disabled={!selectedAgent || !inputValue.trim()}
             style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
           >
-            發送
+            {t('common.send')}
           </Button>
         </div>
       </div>
@@ -117,8 +122,8 @@ const AgentChat = () => {
       {/* 右側 Agent 列表 */}
       <div className="chat-agent-panel">
         <div className="agent-panel-header">
-          <span className="agent-panel-title">可用代理</span>
-          <span className="agent-panel-view-all">查看全部</span>
+          <span className="agent-panel-title">{t('agentChat.availableAgents')}</span>
+          <span className="agent-panel-view-all">{t('common.viewAll')}</span>
         </div>
         <div className="agent-panel-list">
           {agents.map((agent) => (
@@ -145,7 +150,7 @@ const AgentChat = () => {
                 size="small"
                 style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)', fontSize: 12 }}
               >
-                對話
+                {t('common.chat')}
               </Button>
             </div>
           ))}

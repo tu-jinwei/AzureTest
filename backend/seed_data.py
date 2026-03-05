@@ -114,16 +114,16 @@ def seed_users(session: Session):
     from models.global_models import UserRouteMap
 
     users = [
-        {"email": "super@ctbc.com", "name": "Super Admin", "department": "IT", "country_code": "TW", "role": "super_admin", "status": "active"},
-        {"email": "tina@ctbc.com", "name": "Tina", "department": "規劃部", "country_code": "TW", "role": "platform_admin", "status": "active"},
-        {"email": "john@ctbc.com", "name": "John", "department": "研發部", "country_code": "TW", "role": "user_manager", "status": "active"},
-        {"email": "alice@ctbc.com", "name": "Alice", "department": "行銷部", "country_code": "TW", "role": "library_manager", "status": "active"},
-        {"email": "bob@ctbc.com.sg", "name": "Bob", "department": "財務部", "country_code": "SG", "role": "user", "status": "active"},
-        {"email": "admin.sg@ctbc.com", "name": "SG Admin", "department": "管理部", "country_code": "SG", "role": "platform_admin", "status": "active"},
-        {"email": "carol@ctbc.com", "name": "Carol", "department": "人資部", "country_code": "TW", "role": "user", "status": "active"},
-        {"email": "david@ctbc.co.jp", "name": "David", "department": "研發部", "country_code": "JP", "role": "user", "status": "active"},
-        {"email": "eva@ctbc.com", "name": "Eva", "department": "規劃部", "country_code": "TW", "role": "user", "status": "inactive"},
-        {"email": "frank@ctbc.co.th", "name": "Frank", "department": "行銷部", "country_code": "TH", "role": "user", "status": "active"},
+        {"email": "super@ctbc.com", "name": "Super Admin", "department": "it", "country_code": "TW", "role": "super_admin", "status": "active"},
+        {"email": "tina@ctbc.com", "name": "Tina", "department": "planning", "country_code": "TW", "role": "platform_admin", "status": "active"},
+        {"email": "john@ctbc.com", "name": "John", "department": "rd", "country_code": "TW", "role": "user_manager", "status": "active"},
+        {"email": "alice@ctbc.com", "name": "Alice", "department": "marketing", "country_code": "TW", "role": "library_manager", "status": "active"},
+        {"email": "bob@ctbc.com.sg", "name": "Bob", "department": "finance", "country_code": "SG", "role": "user", "status": "active"},
+        {"email": "admin.sg@ctbc.com", "name": "SG Admin", "department": "management", "country_code": "SG", "role": "platform_admin", "status": "active"},
+        {"email": "carol@ctbc.com", "name": "Carol", "department": "hr", "country_code": "TW", "role": "user", "status": "active"},
+        {"email": "david@ctbc.co.jp", "name": "David", "department": "rd", "country_code": "JP", "role": "user", "status": "active"},
+        {"email": "eva@ctbc.com", "name": "Eva", "department": "planning", "country_code": "TW", "role": "user", "status": "inactive"},
+        {"email": "frank@ctbc.co.th", "name": "Frank", "department": "marketing", "country_code": "TH", "role": "user", "status": "active"},
     ]
 
     now = datetime.now(timezone.utc)

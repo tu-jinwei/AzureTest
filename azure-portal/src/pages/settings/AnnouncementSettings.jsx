@@ -27,6 +27,7 @@ import { adaptAnnouncements, toAnnouncementCreate, toAnnouncementUpdate } from '
 import { announcements as mockAnnouncements } from '../../data/mockData';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCountry } from '../../contexts/CountryContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import '../Settings.css';
 
 const { TextArea } = Input;
@@ -34,6 +35,7 @@ const { TextArea } = Input;
 const AnnouncementSettings = () => {
   const { user } = useAuth();
   const { effectiveCountry, countries, isSuperAdmin, displayCountry } = useCountry();
+  const { t } = useLanguage();
 
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -88,11 +90,11 @@ const AnnouncementSettings = () => {
   const handleDelete = async (id) => {
     try {
       await announcementAPI.delete(id, effectiveCountry);
-      message.success('公告已刪除');
+      message.success(t('announcementSettings.deleted'));
       fetchAnnouncements(effectiveCountry);
     } catch (err) {
       console.error('刪除公告失敗', err);
-      message.error('刪除失敗：' + (err.response?.data?.detail || err.message));
+      message.error(t('announcementSettings.deleteFailed') + '：' + (err.response?.data?.detail || err.message));
     }
   };
 
@@ -112,11 +114,11 @@ const AnnouncementSettings = () => {
       if (editingItem) {
         await announcementAPI.update(editingItem.id, toAnnouncementUpdate(adapterData), countryParam);
         noticeId = editingItem.id;
-        message.success('公告已更新');
+        message.success(t('announcementSettings.updated'));
       } else {
         const res = await announcementAPI.create(toAnnouncementCreate(adapterData), countryParam);
         noticeId = res.data?.detail;
-        message.success('公告已新增');
+        message.success(t('announcementSettings.created'));
       }
 
       // 如果有選擇檔案，上傳附件（支援多檔）
@@ -128,10 +130,10 @@ const AnnouncementSettings = () => {
         });
         try {
           await announcementAPI.uploadFile(noticeId, formData, countryParam);
-          message.success(`已上傳 ${fileList.length} 個附件`);
+          message.success(t('announcementSettings.uploadedCount', { count: fileList.length }));
         } catch (uploadErr) {
           console.error('上傳附件失敗', uploadErr);
-          message.warning('公告已儲存，但附件上傳失敗：' + (uploadErr.response?.data?.detail || uploadErr.message));
+          message.warning(t('announcementSettings.uploadFailed') + '：' + (uploadErr.response?.data?.detail || uploadErr.message));
         }
       }
 
@@ -142,7 +144,7 @@ const AnnouncementSettings = () => {
     } catch (err) {
       if (err.errorFields) return;
       console.error('儲存公告失敗', err);
-      message.error('儲存失敗：' + (err.response?.data?.detail || err.message));
+      message.error(t('announcementSettings.saveFailed') + '：' + (err.response?.data?.detail || err.message));
     }
   };
 
@@ -155,30 +157,30 @@ const AnnouncementSettings = () => {
 
   const columns = [
     {
-      title: '日期',
+      title: t('announcementSettings.date'),
       dataIndex: 'date',
       key: 'date',
       width: 120,
     },
     {
-      title: '主旨',
+      title: t('announcementSettings.subject'),
       dataIndex: 'subject',
       key: 'subject',
     },
     {
-      title: '狀態',
+      title: t('common.status'),
       dataIndex: 'publish_status',
       key: 'publish_status',
       width: 100,
       render: (status) =>
         status === 'published' ? (
-          <Tag color="green">已發布</Tag>
+          <Tag color="green">{t('common.published')}</Tag>
         ) : (
-          <Tag>草稿</Tag>
+          <Tag>{t('common.draft')}</Tag>
         ),
     },
     {
-      title: '附件',
+      title: t('announcementSettings.attachment'),
       dataIndex: 'attachments',
       key: 'attachments',
       width: 120,
@@ -186,13 +188,13 @@ const AnnouncementSettings = () => {
         if (!attachments || attachments.length === 0) return '-';
         return (
           <Tag color="blue">
-            {attachments.length > 1 ? `${attachments.length} 個附件` : '有附件'}
+            {attachments.length > 1 ? t('announcementSettings.attachmentsCount', { count: attachments.length }) : t('announcementSettings.hasAttachment')}
           </Tag>
         );
       },
     },
     {
-      title: '操作',
+      title: t('common.actions'),
       key: 'actions',
       width: 160,
       render: (_, record) => (
@@ -203,16 +205,16 @@ const AnnouncementSettings = () => {
             onClick={() => handleEdit(record)}
             style={{ color: 'var(--primary-color)' }}
           >
-            編輯
+            {t('common.edit')}
           </Button>
           <Popconfirm
-            title="確定要刪除此公告嗎？"
+            title={t('announcementSettings.deleteConfirm')}
             onConfirm={() => handleDelete(record.id)}
-            okText="確定"
-            cancelText="取消"
+            okText={t('common.confirm')}
+            cancelText={t('common.cancel')}
           >
             <Button type="text" danger icon={<DeleteOutlined />}>
-              刪除
+              {t('common.delete')}
             </Button>
           </Popconfirm>
         </Space>
@@ -225,11 +227,11 @@ const AnnouncementSettings = () => {
       <div className="settings-header">
         <h2 className="page-title">
           <NotificationOutlined style={{ marginRight: 8 }} />
-          公告欄設定
+          {t('announcementSettings.title')}
         </h2>
         <div className="settings-actions">
           <Input
-            placeholder="搜尋公告..."
+            placeholder={t('announcementSettings.searchPlaceholder')}
             prefix={<SearchOutlined />}
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
@@ -242,7 +244,7 @@ const AnnouncementSettings = () => {
             onClick={handleAdd}
             style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
           >
-            新增公告
+            {t('announcementSettings.addAnnouncement')}
           </Button>
         </div>
       </div>
@@ -254,17 +256,17 @@ const AnnouncementSettings = () => {
           rowKey="id"
           loading={loading}
           pagination={{ pageSize: 10 }}
-          locale={{ emptyText: '尚無公告' }}
+          locale={{ emptyText: t('announcementSettings.noAnnouncements') }}
         />
       </div>
 
       <Modal
-        title={editingItem ? '編輯公告' : '新增公告'}
+        title={editingItem ? t('announcementSettings.editAnnouncement') : t('announcementSettings.addAnnouncement')}
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         onOk={handleSave}
-        okText="儲存"
-        cancelText="取消"
+        okText={t('common.save')}
+        cancelText={t('common.cancel')}
         okButtonProps={{ style: { background: 'var(--primary-color)', borderColor: 'var(--primary-color)' } }}
       >
         <Form form={form} layout="vertical">
@@ -275,57 +277,104 @@ const AnnouncementSettings = () => {
               label={
                 <span>
                   <GlobalOutlined style={{ marginRight: 4 }} />
-                  目標國家
+                  {t('announcementSettings.targetCountry')}
                 </span>
               }
-              rules={[{ required: true, message: '請選擇目標國家' }]}
+              rules={[{ required: true, message: t('announcementSettings.targetCountryRequired') }]}
             >
               <Select
-                placeholder="請選擇目標國家"
-                options={countries.map((c) => ({ value: c.code, label: `${c.name} (${c.code})` }))}
+                placeholder={t('announcementSettings.targetCountryPlaceholder')}
+                options={countries.map((c) => ({ value: c.code, label: `${t(`countries.${c.code}`) || c.name} (${c.code})` }))}
               />
             </Form.Item>
           )}
           <Form.Item
             name="subject"
-            label="主旨"
-            rules={[{ required: true, message: '請輸入公告主旨' }]}
+            label={t('announcementSettings.subject')}
+            rules={[{ required: true, message: t('announcementSettings.subjectRequired') }]}
           >
-            <Input placeholder="請輸入公告主旨" />
+            <Input placeholder={t('announcementSettings.subjectPlaceholder')} />
           </Form.Item>
           <Form.Item
             name="content"
-            label="內容（以英文為主，約 150 字元）"
-            rules={[{ required: true, message: '請輸入公告內容' }]}
+            label={t('announcementSettings.content')}
+            rules={[{ required: true, message: t('announcementSettings.contentRequired') }]}
           >
-            <TextArea rows={4} placeholder="Enter announcement content..." maxLength={300} showCount />
+            <TextArea rows={4} placeholder={t('announcementSettings.contentPlaceholder')} maxLength={300} showCount />
           </Form.Item>
-          <Form.Item name="publish_status" label="發布狀態" initialValue="published">
+          <Form.Item name="publish_status" label={t('announcementSettings.publishStatus')} initialValue="published">
             <Select>
-              <Select.Option value="published">已發布</Select.Option>
-              <Select.Option value="draft">草稿</Select.Option>
+              <Select.Option value="published">{t('common.published')}</Select.Option>
+              <Select.Option value="draft">{t('common.draft')}</Select.Option>
             </Select>
           </Form.Item>
-          <Form.Item label="附件檔案（PDF）" extra="可選擇多個檔案，每個檔案上限 100 MB">
+          <Form.Item label={t('announcementSettings.attachmentLabel')} extra={t('announcementSettings.attachmentHint')}>
             <Upload
               multiple
-              accept=".pdf"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp"
               fileList={fileList}
-              onChange={({ fileList: newFileList }) => setFileList(newFileList)}
-              beforeUpload={(file) => {
-                if (file.size > 100 * 1024 * 1024) {
-                  message.error(`${file.name} 超過 100 MB`);
-                  return Upload.LIST_IGNORE;
+              onChange={({ fileList: newFileList }) => {
+                const totalSize = newFileList.reduce((sum, f) => sum + (f.originFileObj?.size || f.size || 0), 0);
+                if (totalSize > 100 * 1024 * 1024) {
+                  message.error(t('announcementSettings.fileSizeExceeded', { size: (totalSize / 1024 / 1024).toFixed(1) }));
+                  return;
                 }
-                return false;
+                setFileList(newFileList);
               }}
+              beforeUpload={() => false}
             >
-              <Button icon={<UploadOutlined />}>選擇檔案</Button>
+              <Button icon={<UploadOutlined />}>{t('common.selectFile')}</Button>
             </Upload>
-            {editingItem?.attachments?.length > 0 && fileList.length === 0 && (
-              <div style={{ marginTop: 4, color: '#888', fontSize: 12 }}>
-                <PaperClipOutlined style={{ marginRight: 4 }} />
-                目前附件：{editingItem.attachments.map((a) => a.name).join('、')}（不選擇新檔案則保留原附件）
+            {editingItem?.attachments?.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ marginBottom: 4, color: '#666', fontSize: 12 }}>
+                  <PaperClipOutlined style={{ marginRight: 4 }} />
+                  {t('announcementSettings.currentAttachments')}：
+                </div>
+                {editingItem.attachments.map((a) => (
+                  <div
+                    key={a.name}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '4px 8px',
+                      marginBottom: 4,
+                      background: '#f5f5f5',
+                      borderRadius: 4,
+                      fontSize: 13,
+                    }}
+                  >
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <PaperClipOutlined style={{ marginRight: 4, color: '#1890ff' }} />
+                      {a.name}
+                      {a.fileSize ? ` (${(a.fileSize / 1024).toFixed(0)} KB)` : ''}
+                    </span>
+                    <Popconfirm
+                      title={t('announcementSettings.deleteAttachmentConfirm', { name: a.name })}
+                      onConfirm={async () => {
+                        try {
+                          const countryParam = isSuperAdmin ? displayCountry : undefined;
+                          await announcementAPI.deleteFile(editingItem.id, a.name, countryParam);
+                          message.success(t('announcementSettings.attachmentDeleted', { name: a.name }));
+                          // 重新載入公告列表
+                          await fetchAnnouncements(effectiveCountry);
+                          // 更新 editingItem 的附件列表
+                          setEditingItem((prev) => ({
+                            ...prev,
+                            attachments: prev.attachments.filter((att) => att.name !== a.name),
+                          }));
+                        } catch (err) {
+                          message.error(t('announcementSettings.attachmentDeleteFailed') + '：' + (err.response?.data?.detail || err.message));
+                        }
+                      }}
+                      okText={t('common.confirm')}
+                      cancelText={t('common.cancel')}
+                    >
+                      <Button type="text" danger icon={<DeleteOutlined />} size="small" />
+                    </Popconfirm>
+                  </div>
+                ))}
               </div>
             )}
           </Form.Item>

@@ -167,6 +167,8 @@ export function adaptLibraryDoc(apiData) {
     pdfUrl: apiData.file_url || '#',
     hasFile: !!apiData.file_url || files.length > 0, // 是否有上傳檔案
     files, // 多檔案資訊陣列 [{ filename, relative_path, file_size }]
+    libraryName: apiData.library_name ?? '', // 所屬館名（供首頁顯示）
+    createdAt: apiData.created_at ?? null, // 建立時間
     _libraryName: apiData.library_name ?? '', // 內部欄位，供 adaptLibraryDocs 分組用
   };
 }
@@ -204,6 +206,20 @@ export function adaptLibraryDocs(apiDataList) {
   });
 
   return Array.from(groupMap.values());
+}
+
+/**
+ * 多筆文件轉換（扁平列表，不分組）— 首頁最新文件用
+ *
+ * @param {Array} apiDataList - 後端文件扁平陣列
+ * @returns {Array} 前端格式的文件扁平陣列（不含內部欄位 _libraryName）
+ */
+export function adaptLibraryDocsFlat(apiDataList) {
+  if (!Array.isArray(apiDataList)) return [];
+  return apiDataList
+    .map(adaptLibraryDoc)
+    .filter(Boolean)
+    .map(({ _libraryName, ...doc }) => doc);
 }
 
 // ============================================================
