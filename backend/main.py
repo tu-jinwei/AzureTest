@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from config import settings
 from core.database import init_global_db, close_global_db
 from core.local_database import local_db_factory
+from core.portal_mongo import init_portal_mongo, close_portal_mongo
 
 # 設定 logging
 logging.basicConfig(
@@ -47,12 +48,19 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️ Local DB 初始化部分失敗（應用程式仍可運行）: {e}")
 
+    # 初始化 Portal MongoDB（對話歷史專用）
+    try:
+        await init_portal_mongo()
+    except Exception as e:
+        logger.warning(f"⚠️ Portal MongoDB 初始化失敗（對話歷史功能將無法使用）: {e}")
+
     yield
 
     # === 關閉 ===
     logger.info("🛑 CTBC AI Portal Backend 關閉中...")
     await close_global_db()
     await local_db_factory.close_all()
+    await close_portal_mongo()
     logger.info("✅ 所有資料庫連線已關閉")
 
 

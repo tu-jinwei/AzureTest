@@ -115,7 +115,11 @@ const vi = {
     selectAgentPlaceholder: 'Vui lòng chọn Agent trước',
     loadingAgents: 'Đang tải danh sách Agent...',
     availableAgents: 'Agent khả dụng',
-    mockReply: 'Xin chào! Tôi là {name}, đã nhận tin nhắn của bạn: "{message}". Đây là phản hồi mô phỏng, chức năng thực tế cần kết nối API backend.',
+    newChat: 'Cuộc trò chuyện mới',
+    multiTurn: 'Nhiều lượt',
+    stop: 'Dừng',
+    waitingReply: 'AI đang trả lời, vui lòng đợi...',
+    errorReply: 'AI trả lời thất bại, vui lòng thử lại sau',
   },
 
   // ===== Lịch sử trò chuyện =====

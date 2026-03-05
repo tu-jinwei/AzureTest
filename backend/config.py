@@ -96,6 +96,18 @@ class Settings:
     SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
     SMTP_FROM: str = os.getenv("SMTP_FROM", "")
 
+    # === Agatha Public API ===
+    AGATHA_API_URL: str = os.getenv(
+        "AGATHA_API_URL",
+        "https://uat.heph-ai.net/agatha/public/api/public-api-keys/chat",
+    )
+    AGATHA_API_KEY: str = os.getenv("AGATHA_API_KEY", "")
+    AGATHA_API_TIMEOUT: int = int(os.getenv("AGATHA_API_TIMEOUT", "120"))
+
+    # === Portal MongoDB（對話歷史專用，獨立於 Local DB） ===
+    PORTAL_MONGO_URI: str = os.getenv("PORTAL_MONGO_URI", "")
+    PORTAL_MONGO_DB: str = os.getenv("PORTAL_MONGO_DB", "ctbc_portal")
+
     # === CORS ===
     @property
     def CORS_ORIGINS(self) -> List[str]:

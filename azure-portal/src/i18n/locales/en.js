@@ -115,7 +115,11 @@ const en = {
     selectAgentPlaceholder: 'Please select an Agent first',
     loadingAgents: 'Loading Agent list...',
     availableAgents: 'Available Agents',
-    mockReply: 'Hello! I am {name}, I received your message: "{message}". This is a mock reply, actual functionality requires backend API connection.',
+    newChat: 'New Chat',
+    multiTurn: 'Multi-turn',
+    stop: 'Stop',
+    waitingReply: 'AI is replying, please wait...',
+    errorReply: 'AI reply failed, please try again later',
   },
 
   // ===== Chat History =====

@@ -275,16 +275,144 @@ export const libraryAPI = {
     }),
 };
 
-// ===== 對話 API（暫時保留，等 MongoDB）=====
+// ===== 對話 API =====
 export const chatAPI = {
+  /** 非 streaming 發送訊息 */
   send: (data) =>
     api.post('/chat', data),
 
+  /** [Deprecated] 取得對話歷史列表（舊版，請改用 sessions） */
   history: () =>
     api.get('/chat/history'),
 
+  /** [Deprecated] 取得單一對話詳情（舊版，請改用 sessionDetail） */
   detail: (chatId) =>
     api.get(`/chat/${chatId}`),
+
+  /** 取得對話 Session 列表（分頁）
+   * @param {object} params - { page, page_size, agent_id }
+   */
+  sessions: (params) =>
+    api.get('/chat/sessions', { params }),
+
+  /** 取得對話 Session 詳情（含所有訊息）
+   * @param {string} sessionId - Session ID (sess-xxx)
+   */
+  sessionDetail: (sessionId) =>
+    api.get(`/chat/sessions/${sessionId}`),
+
+  /** 刪除對話 Session
+   * @param {string} sessionId - Session ID (sess-xxx)
+   */
+  deleteSession: (sessionId) =>
+    api.delete(`/chat/sessions/${sessionId}`),
+
+  /**
+   * Streaming 聊天（SSE）— 整合 Agatha Public API
+   *
+   * @param {object} data - { agent_id, message, session_id }
+   * @param {function} onMessage - 收到 SSE 事件時的回調 (eventData)
+   * @param {function} onComplete - 串流結束時的回調
+   * @param {function} onError - 錯誤時的回調 (error)
+   * @returns {function} abort - 呼叫此函式可中斷串流
+   */
+  stream: (data, onMessage, onComplete, onError) => {
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const token = getToken();
+        const response = await fetch(`${BASE_PREFIX}/api/chat/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(data),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          let errorMessage = `服務錯誤 (${response.status})`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.detail || errorData.message || errorMessage;
+          } catch (_) {
+            // 無法解析 JSON，使用預設錯誤訊息
+          }
+          throw new Error(errorMessage);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+
+          if (!done) {
+            buffer += decoder.decode(value, { stream: true });
+          }
+
+          const lines = buffer.split('\n');
+
+          if (done) {
+            buffer = '';
+          } else {
+            buffer = lines.pop() || '';
+          }
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+
+            // 跳過 [DONE] 標記
+            if (trimmed === 'data: [DONE]' || trimmed === '[DONE]') {
+              continue;
+            }
+
+            if (trimmed.startsWith('data: ')) {
+              const dataStr = trimmed.slice(6);
+              if (dataStr === '[DONE]') continue;
+
+              try {
+                const jsonData = JSON.parse(dataStr);
+
+                // 錯誤事件 → 呼叫 onError 並中斷
+                if (jsonData.type === 'error') {
+                  if (onError) onError(new Error(jsonData.message || 'AI 服務錯誤'));
+                  try { await reader.cancel(); } catch (_) {}
+                  return;
+                }
+
+                // 轉發事件給前端
+                if (onMessage) onMessage(jsonData);
+              } catch (e) {
+                console.warn('⚠️ 解析 SSE 資料失敗:', trimmed.substring(0, 80), e.message);
+              }
+            }
+          }
+
+          if (done) {
+            if (onComplete) onComplete();
+            break;
+          }
+        }
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          // 使用者主動中斷，不視為錯誤
+          if (onComplete) onComplete();
+          return;
+        }
+        console.error('❌ Streaming 聊天錯誤:', error);
+        if (onError) onError(error);
+      }
+    })();
+
+    // 回傳 abort 函式
+    return () => controller.abort();
+  },
 };
 
 // ===== 國家 API =====

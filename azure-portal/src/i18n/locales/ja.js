@@ -115,7 +115,11 @@ const ja = {
     selectAgentPlaceholder: 'まずAgentを選択してください',
     loadingAgents: 'Agent リストを読み込み中...',
     availableAgents: '利用可能なエージェント',
-    mockReply: 'こんにちは！{name}です。メッセージを受信しました：「{message}」。これはモック返信です。実際の機能にはバックエンドAPIの接続が必要です。',
+    newChat: '新しいチャット',
+    multiTurn: 'マルチターン',
+    stop: '停止',
+    waitingReply: 'AI が返信中です。お待ちください...',
+    errorReply: 'AI の返信に失敗しました。後でもう一度お試しください',
   },
 
   // ===== チャット履歴 =====

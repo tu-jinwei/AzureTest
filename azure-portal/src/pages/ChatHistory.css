@@ -79,12 +79,66 @@
   text-overflow: ellipsis;
 }
 
+.history-item-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .history-item-time {
   font-size: 12px;
   color: var(--text-light);
   white-space: nowrap;
   display: flex;
   align-items: center;
+}
+
+.history-item-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.history-item:hover .history-item-actions {
+  opacity: 1;
+}
+
+.history-action-btn {
+  font-size: 16px;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.history-action-btn.continue {
+  color: var(--primary-color);
+}
+
+.history-action-btn.continue:hover {
+  color: #1a8a91;
+  background: rgba(42, 171, 179, 0.1);
+}
+
+.history-action-btn.delete {
+  color: #999;
+}
+
+.history-action-btn.delete:hover {
+  color: #ff4d4f;
+  background: rgba(255, 77, 79, 0.1);
+}
+
+/* ===== 分頁 ===== */
+.history-pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
 }
 
 /* ===== Modal 對話詳情 ===== */

@@ -191,6 +191,14 @@ def seed_agents(session: Session) -> list:
             "is_published": True,
             "agent_config_json": {"model": "gpt-4.1"},
         },
+        {
+            "name": "Agatha AI 助理",
+            "icon": "🧠",
+            "color": "#7C4DFF",
+            "description": "由 Agatha 平台驅動的智慧 AI 助理，支援多輪對話與即時串流回覆。",
+            "is_published": True,
+            "agent_config_json": {"model": "agatha", "agatha_enabled": True},
+        },
     ]
 
     agent_ids = []

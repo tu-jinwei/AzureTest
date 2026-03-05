@@ -115,7 +115,11 @@ const th = {
     selectAgentPlaceholder: 'กรุณาเลือก Agent ก่อน',
     loadingAgents: 'กำลังโหลดรายการ Agent...',
     availableAgents: 'Agent ที่ใช้ได้',
-    mockReply: 'สวัสดี! ฉันคือ {name} ได้รับข้อความของคุณแล้ว: "{message}" นี่คือการตอบกลับจำลอง ฟังก์ชันจริงต้องเชื่อมต่อ API แบ็กเอนด์',
+    newChat: 'แชทใหม่',
+    multiTurn: 'หลายรอบ',
+    stop: 'หยุด',
+    waitingReply: 'AI กำลังตอบกลับ กรุณารอสักครู่...',
+    errorReply: 'AI ตอบกลับล้มเหลว กรุณาลองใหม่ภายหลัง',
   },
 
   // ===== ประวัติแชท =====

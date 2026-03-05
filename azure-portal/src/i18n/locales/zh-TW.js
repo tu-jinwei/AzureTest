@@ -115,7 +115,11 @@ const zhTW = {
     selectAgentPlaceholder: '請先選擇一個 Agent',
     loadingAgents: '載入 Agent 列表中...',
     availableAgents: '可用代理',
-    mockReply: '您好！我是 {name}，已收到您的訊息：「{message}」。這是模擬回覆，實際功能需連接後端 API。',
+    newChat: '新對話',
+    multiTurn: '多輪對話中',
+    stop: '停止',
+    waitingReply: 'AI 回覆中，請稍候...',
+    errorReply: 'AI 回覆失敗，請稍後再試',
   },
 
   // ===== 對話歷史 =====

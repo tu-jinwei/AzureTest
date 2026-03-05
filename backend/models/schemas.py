@@ -153,6 +153,13 @@ class ChatCreate(BaseModel):
     message: str
 
 
+class ChatStreamCreate(BaseModel):
+    """Streaming 聊天請求（整合 Agatha Public API）"""
+    agent_id: str
+    message: str
+    session_id: Optional[str] = None  # null=新對話, "sess-xxx"=延續對話
+
+
 class ChatResponse(BaseModel):
     chat_id: str
     agent_id: str
@@ -168,6 +175,46 @@ class ChatHistoryItem(BaseModel):
     agent_name: Optional[str] = None
     last_message: Optional[str] = None
     timestamp: Optional[datetime] = None
+
+
+# ===== 對話歷史（Session + Message 雙 Collection） =====
+class SessionSummary(BaseModel):
+    """對話 Session 摘要（列表用）"""
+    session_id: str
+    agent_id: str
+    agent_name: Optional[str] = None
+    title: Optional[str] = None
+    last_message_preview: Optional[str] = None
+    message_count: int = 0
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class SessionListResponse(BaseModel):
+    """對話 Session 列表回應（含分頁）"""
+    sessions: List[SessionSummary] = []
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
+
+
+class SessionMessageItem(BaseModel):
+    """單條訊息"""
+    role: str
+    content: str
+    created_at: Optional[datetime] = None
+
+
+class SessionDetailResponse(BaseModel):
+    """對話 Session 詳情（含所有訊息）"""
+    session_id: str
+    agent_id: str
+    agent_name: Optional[str] = None
+    title: Optional[str] = None
+    thread_id: Optional[str] = None
+    messages: List[SessionMessageItem] = []
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 
 # ===== 通用 =====

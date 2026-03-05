@@ -267,18 +267,8 @@ export function adaptUsers(apiDataList) {
 // ============================================================
 
 /**
- * 單筆聊天歷史：後端 ChatHistoryItem / ChatResponse → 前端 chatHistory 物件
- *
- * 後端欄位 (schemas.ChatHistoryItem):
- *   chat_id, agent_id, agent_name, last_message, timestamp
- * 後端欄位 (schemas.ChatResponse):
- *   chat_id, agent_id, agent_name, messages, created_at, updated_at
- *
- * 前端欄位 (mockData.chatHistory[]):
- *   id, agentId, agentName, lastMessage, timestamp, messages
- *
- * @param {object} apiData - 後端 API 回傳的聊天歷史物件
- * @returns {object} 前端格式的聊天歷史物件
+ * [Deprecated] 單筆聊天歷史：後端 ChatHistoryItem → 前端 chatHistory 物件
+ * 請改用 adaptSessionSummary
  */
 export function adaptChatHistoryItem(apiData) {
   if (!apiData) return null;
@@ -294,13 +284,111 @@ export function adaptChatHistoryItem(apiData) {
 }
 
 /**
- * 多筆聊天歷史轉換
- * @param {Array} apiDataList - 後端聊天歷史陣列
- * @returns {Array} 前端格式的聊天歷史陣列
+ * [Deprecated] 多筆聊天歷史轉換
+ * 請改用 adaptSessionList
  */
 export function adaptChatHistory(apiDataList) {
   if (!Array.isArray(apiDataList)) return [];
   return apiDataList.map(adaptChatHistoryItem).filter(Boolean);
+}
+
+// ============================================================
+// 對話 Session（新版）  —  後端 → 前端
+// ============================================================
+
+/**
+ * 將 ISO 日期轉為 "YYYY-MM-DD HH:mm" 格式
+ * @param {string} isoString - ISO 8601 格式的日期字串
+ * @returns {string} 格式化的日期時間字串
+ */
+export function formatDateTime(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
+}
+
+/**
+ * 單筆 Session 摘要：後端 SessionSummary → 前端物件
+ *
+ * 後端欄位 (schemas.SessionSummary):
+ *   session_id, agent_id, agent_name, title, last_message_preview,
+ *   message_count, created_at, updated_at
+ *
+ * @param {object} apiData - 後端 API 回傳的 Session 摘要
+ * @returns {object} 前端格式的 Session 物件
+ */
+export function adaptSessionSummary(apiData) {
+  if (!apiData) return null;
+
+  return {
+    sessionId: apiData.session_id,
+    agentId: apiData.agent_id,
+    agentName: apiData.agent_name ?? '',
+    title: apiData.title ?? '',
+    lastMessagePreview: apiData.last_message_preview ?? '',
+    messageCount: apiData.message_count ?? 0,
+    createdAt: apiData.created_at,
+    updatedAt: apiData.updated_at,
+    formattedTime: formatDateTime(apiData.updated_at || apiData.created_at),
+  };
+}
+
+/**
+ * Session 列表回應轉換
+ *
+ * 後端欄位 (schemas.SessionListResponse):
+ *   sessions, total, page, page_size
+ *
+ * @param {object} apiData - 後端 API 回傳的列表回應
+ * @returns {object} { sessions: [...], total, page, pageSize }
+ */
+export function adaptSessionList(apiData) {
+  if (!apiData) return { sessions: [], total: 0, page: 1, pageSize: 20 };
+
+  return {
+    sessions: Array.isArray(apiData.sessions)
+      ? apiData.sessions.map(adaptSessionSummary).filter(Boolean)
+      : [],
+    total: apiData.total ?? 0,
+    page: apiData.page ?? 1,
+    pageSize: apiData.page_size ?? 20,
+  };
+}
+
+/**
+ * Session 詳情轉換（含訊息列表）
+ *
+ * 後端欄位 (schemas.SessionDetailResponse):
+ *   session_id, agent_id, agent_name, title, thread_id, messages, created_at, updated_at
+ *
+ * @param {object} apiData - 後端 API 回傳的 Session 詳情
+ * @returns {object} 前端格式的 Session 詳情
+ */
+export function adaptSessionDetail(apiData) {
+  if (!apiData) return null;
+
+  return {
+    sessionId: apiData.session_id,
+    agentId: apiData.agent_id,
+    agentName: apiData.agent_name ?? '',
+    title: apiData.title ?? '',
+    threadId: apiData.thread_id ?? null,
+    messages: Array.isArray(apiData.messages)
+      ? apiData.messages.map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+          time: formatDateTime(msg.created_at),
+        }))
+      : [],
+    createdAt: apiData.created_at,
+    updatedAt: apiData.updated_at,
+  };
 }
 
 // ============================================================
