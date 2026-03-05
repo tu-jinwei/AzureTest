@@ -129,6 +129,12 @@ const vi = {
     filterAgent: 'Lọc Agent',
     noRecords: 'Không tìm thấy bản ghi cuộc trò chuyện',
     loadingHistory: 'Đang tải lịch sử trò chuyện...',
+    continueChat: 'Tiếp tục trò chuyện',
+    confirmDelete: 'Bạn có chắc chắn muốn xóa cuộc trò chuyện này không?',
+    deleteSuccess: 'Đã xóa cuộc trò chuyện',
+    deleteFailed: 'Xóa thất bại',
+    messages: 'tin nhắn',
+    noMessages: 'Không có tin nhắn',
   },
 
   // ===== Thư viện =====

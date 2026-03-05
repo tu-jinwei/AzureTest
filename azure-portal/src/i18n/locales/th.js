@@ -129,6 +129,12 @@ const th = {
     filterAgent: 'กรอง Agent',
     noRecords: 'ไม่พบบันทึกการสนทนา',
     loadingHistory: 'กำลังโหลดประวัติแชท...',
+    continueChat: 'สนทนาต่อ',
+    confirmDelete: 'คุณแน่ใจหรือไม่ว่าต้องการลบการสนทนานี้?',
+    deleteSuccess: 'ลบการสนทนาแล้ว',
+    deleteFailed: 'ลบไม่สำเร็จ',
+    messages: 'ข้อความ',
+    noMessages: 'ไม่มีข้อความ',
   },
 
   // ===== ห้องสมุด =====

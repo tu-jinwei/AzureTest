@@ -129,6 +129,12 @@ const ja = {
     filterAgent: 'Agent フィルター',
     noRecords: 'チャット記録が見つかりません',
     loadingHistory: 'チャット履歴を読み込み中...',
+    continueChat: 'チャットを続ける',
+    confirmDelete: 'このチャットを削除してもよろしいですか？',
+    deleteSuccess: 'チャットが削除されました',
+    deleteFailed: '削除に失敗しました',
+    messages: '件',
+    noMessages: 'メッセージがありません',
   },
 
   // ===== ライブラリ =====

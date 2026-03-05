@@ -129,6 +129,12 @@ const zhTW = {
     filterAgent: '篩選 Agent',
     noRecords: '沒有找到對話記錄',
     loadingHistory: '載入對話歷史中...',
+    continueChat: '繼續對話',
+    confirmDelete: '確定要刪除這個對話嗎？',
+    deleteSuccess: '對話已刪除',
+    deleteFailed: '刪除失敗',
+    messages: '條',
+    noMessages: '沒有訊息',
   },
 
   // ===== 圖書館 =====

@@ -192,3 +192,31 @@
   margin-top: 4px;
   opacity: 0.6;
 }
+
+/* ===== Modal 繼續對話按鈕 ===== */
+.history-modal-continue-btn.ant-btn {
+  height: 48px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 10px;
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(42, 171, 179, 0.3);
+  transition: all 0.3s;
+}
+
+.history-modal-continue-btn.ant-btn:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+  box-shadow: 0 6px 16px rgba(42, 171, 179, 0.4);
+  transform: translateY(-1px);
+}
+
+.history-modal-continue-btn.ant-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(42, 171, 179, 0.3);
+}

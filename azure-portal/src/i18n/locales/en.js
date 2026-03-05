@@ -129,6 +129,12 @@ const en = {
     filterAgent: 'Filter Agent',
     noRecords: 'No conversation records found',
     loadingHistory: 'Loading chat history...',
+    continueChat: 'Continue Chat',
+    confirmDelete: 'Are you sure you want to delete this conversation?',
+    deleteSuccess: 'Conversation deleted',
+    deleteFailed: 'Failed to delete',
+    messages: 'messages',
+    noMessages: 'No messages',
   },
 
   // ===== Library =====

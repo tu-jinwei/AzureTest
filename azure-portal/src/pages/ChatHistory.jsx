@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Modal, Tag, Input, Select, Empty, Spin, Pagination, Popconfirm, message as antdMessage } from 'antd';
+import { Modal, Tag, Input, Select, Empty, Spin, Pagination, Popconfirm, Button, message as antdMessage } from 'antd';
 import {
   HistoryOutlined,
   SearchOutlined,
@@ -248,17 +248,20 @@ const ChatHistory = () => {
         footer={
           selectedSession
             ? [
-                <button
+                <Button
                   key="continue"
-                  className="ant-btn ant-btn-primary"
+                  type="primary"
+                  size="large"
+                  block
+                  className="history-modal-continue-btn"
+                  icon={<PlayCircleOutlined />}
                   onClick={() => {
                     setSelectedSession(null);
                     handleContinueChat(selectedSession);
                   }}
                 >
-                  <PlayCircleOutlined style={{ marginRight: 4 }} />
                   {t('chatHistoryPage.continueChat') || '繼續對話'}
-                </button>,
+                </Button>,
               ]
             : null
         }
