@@ -67,6 +67,13 @@ class UserListResponse(BaseModel):
 
 
 # ===== Agent =====
+class AgentACLInfo(BaseModel):
+    """Agent ACL 資訊（嵌入 AgentResponse 中回傳給前端）"""
+    authorized_roles: List[str] = []
+    authorized_users: List[str] = []
+    exception_list: List[str] = []
+
+
 class AgentResponse(BaseModel):
     agent_id: str
     name: str
@@ -75,6 +82,7 @@ class AgentResponse(BaseModel):
     color: Optional[str] = None
     description: Optional[str] = None
     is_published: bool = False
+    acl: Optional[AgentACLInfo] = None
 
 
 class AgentPublishUpdate(BaseModel):

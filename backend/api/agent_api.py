@@ -11,7 +11,7 @@ from core.database import GlobalSessionLocal
 from core.permissions import has_permission, require_permission
 from core.security import get_current_user_payload
 from models.global_models import AgentACL, AgentMaster
-from models.schemas import AgentACLUpdate, AgentPublishUpdate, AgentResponse, MessageResponse
+from models.schemas import AgentACLInfo, AgentACLUpdate, AgentPublishUpdate, AgentResponse, MessageResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -20,9 +20,9 @@ router = APIRouter()
 @router.get("", response_model=List[AgentResponse])
 async def list_agents(payload: dict = Depends(get_current_user_payload)):
     """
-    取得可用 Agent 列表（依授權過濾）
-    - platform_admin / super_admin: 看到所有已上架 Agent
-    - 其他角色: 依 Agent_ACL 過濾
+    取得可用 Agent 列表（所有角色都依 ACL 過濾，包括 super_admin）
+    - 只有在 ACL 的 authorized_users 或 authorized_roles 中的使用者才能看到
+    - 沒有 ACL 記錄的 Agent 不會顯示給任何人
     """
     email = payload["sub"]
     role = payload.get("role", "user")
@@ -34,11 +34,7 @@ async def list_agents(payload: dict = Depends(get_current_user_payload)):
         )
         all_agents = result.scalars().all()
 
-        # platform_admin / super_admin 看到全部
-        if has_permission(role, "access_all_agents"):
-            return [_agent_to_response(a) for a in all_agents]
-
-        # 其他角色需要檢查 ACL
+        # 所有角色都需要檢查 ACL（包括 super_admin / platform_admin）
         authorized_agents = []
         for agent in all_agents:
             acl_result = await session.execute(
@@ -56,14 +52,18 @@ async def list_agents(payload: dict = Depends(get_current_user_payload)):
 async def list_all_agents(
     payload: dict = Depends(require_permission("manage_agent_permissions")),
 ):
-    """取得所有 Agent（管理用，含未上架）"""
+    """取得所有 Agent（管理用，含未上架），包含 ACL 資訊"""
     async with GlobalSessionLocal() as session:
         result = await session.execute(
             select(AgentMaster).order_by(AgentMaster.created_at.desc())
         )
         agents = result.scalars().all()
 
-    return [_agent_to_response(a) for a in agents]
+        # 批次查詢所有 ACL
+        acl_result = await session.execute(select(AgentACL))
+        acl_map = {str(acl.agent_id): acl.allowed_users for acl in acl_result.scalars().all()}
+
+    return [_agent_to_response(a, acl_map.get(str(a.agent_id))) for a in agents]
 
 
 @router.put("/{agent_id}/publish", response_model=MessageResponse)
@@ -135,7 +135,15 @@ async def update_agent_acl(
 
 # === 內部工具函式 ===
 
-def _agent_to_response(agent: AgentMaster) -> AgentResponse:
+def _agent_to_response(agent: AgentMaster, acl_data: dict = None) -> AgentResponse:
+    acl_info = None
+    if acl_data:
+        acl_info = AgentACLInfo(
+            authorized_roles=acl_data.get("authorized_roles", []),
+            authorized_users=acl_data.get("authorized_users", []),
+            exception_list=acl_data.get("exception_list", []),
+        )
+
     return AgentResponse(
         agent_id=str(agent.agent_id),
         name=agent.name,
@@ -144,6 +152,7 @@ def _agent_to_response(agent: AgentMaster) -> AgentResponse:
         color=agent.color,
         description=agent.description,
         is_published=agent.is_published,
+        acl=acl_info,
     )
 
 

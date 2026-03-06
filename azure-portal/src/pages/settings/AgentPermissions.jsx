@@ -6,28 +6,55 @@ import {
   Button,
   Modal,
   Transfer,
+  Checkbox,
+  Divider,
   message,
   Space,
   Badge,
   Spin,
+  Tooltip,
 } from 'antd';
 import {
   SafetyOutlined,
   UserAddOutlined,
-  CheckCircleOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
-import { agentAPI } from '../../services/api';
+import { agentAPI, userAPI } from '../../services/api';
 import { adaptAgents } from '../../utils/adapters';
-import { agents as mockAgents, userList } from '../../data/mockData';
+import { agents as mockAgents } from '../../data/mockData';
 import { useLanguage } from '../../contexts/LanguageContext';
 import '../Settings.css';
+
+// 所有可授權的角色（與後端 permissions.py 的 Role enum 一致）
+const ALL_ROLES = [
+  { value: 'super_admin', label: '台灣最高管理者' },
+  { value: 'platform_admin', label: '平台管理者' },
+  { value: 'user_manager', label: '用戶管理者' },
+  { value: 'library_manager', label: '圖書館管理者' },
+  { value: 'user', label: '一般使用者' },
+];
 
 const AgentPermissions = () => {
   const { t } = useLanguage();
   const [agentData, setAgentData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [transferModal, setTransferModal] = useState(null);
-  const [targetKeys, setTargetKeys] = useState([]);
+  const [aclModal, setAclModal] = useState(null); // 當前編輯的 Agent
+  const [selectedRoles, setSelectedRoles] = useState([]); // 已勾選的角色
+  const [targetKeys, setTargetKeys] = useState([]); // 已選的使用者 email
+  const [allUsers, setAllUsers] = useState([]); // 真實使用者列表
+  const [saving, setSaving] = useState(false);
+
+  // 載入真實使用者列表
+  const fetchUsers = async () => {
+    try {
+      const res = await userAPI.list();
+      const users = Array.isArray(res.data) ? res.data : [];
+      setAllUsers(users);
+    } catch (err) {
+      console.warn('使用者列表 API 失敗', err);
+      setAllUsers([]);
+    }
+  };
 
   const fetchAgents = async () => {
     setLoading(true);
@@ -36,7 +63,8 @@ const AgentPermissions = () => {
       const adapted = adaptAgents(res.data).map((a) => ({
         ...a,
         published: a.status === '可用',
-        assignedUsers: a.assignedUsers || [1, 2], // 預設指派給前兩位使用者
+        assignedUsers: a.acl?.authorizedUsers || [],
+        assignedRoles: a.acl?.authorizedRoles || [],
       }));
       setAgentData(adapted);
     } catch (err) {
@@ -45,7 +73,8 @@ const AgentPermissions = () => {
         mockAgents.map((a) => ({
           ...a,
           published: true,
-          assignedUsers: [1, 2],
+          assignedUsers: [],
+          assignedRoles: [],
         }))
       );
     } finally {
@@ -54,6 +83,7 @@ const AgentPermissions = () => {
   };
 
   useEffect(() => {
+    fetchUsers();
     fetchAgents();
   }, []);
 
@@ -67,43 +97,46 @@ const AgentPermissions = () => {
     }
   };
 
-  const handleACLUpdate = async (agentId, aclData) => {
-    try {
-      await agentAPI.updateACL(agentId, aclData);
-      message.success(t('agentPermissions.aclUpdated'));
-      fetchAgents();
-    } catch (err) {
-      message.error(t('agentPermissions.updateFailed') + '：' + (err.response?.data?.detail || err.message));
-    }
+  const openAclModal = (agent) => {
+    setSelectedRoles(agent.assignedRoles || []);
+    setTargetKeys(agent.assignedUsers || []);
+    setAclModal(agent);
   };
 
-  const openAssignModal = (agent) => {
-    setTargetKeys(agent.assignedUsers.map(String));
-    setTransferModal(agent);
-  };
-
-  const handleAssignSave = async () => {
-    if (!transferModal) return;
+  const handleAclSave = async () => {
+    if (!aclModal) return;
+    setSaving(true);
     try {
-      // 呼叫後端 API 更新 ACL
-      await agentAPI.updateACL(transferModal.id, {
+      const currentAcl = agentData.find(a => a.id === aclModal.id)?.acl || {};
+      await agentAPI.updateACL(aclModal.id, {
+        authorized_roles: selectedRoles,
         authorized_users: targetKeys,
+        exception_list: currentAcl.exceptionList || [],
       });
-      // 更新前端 state
-      setAgentData((prev) =>
-        prev.map((a) =>
-          a.id === transferModal.id
-            ? { ...a, assignedUsers: targetKeys.map(Number) }
-            : a
-        )
-      );
       message.success(t('agentPermissions.permissionUpdated'));
-      setTransferModal(null);
-      // 重新載入以確保資料一致
+      setAclModal(null);
       fetchAgents();
     } catch (err) {
       message.error(t('agentPermissions.updateFailed') + '：' + (err.response?.data?.detail || err.message));
+    } finally {
+      setSaving(false);
     }
+  };
+
+  // 快速操作：全選/取消全選角色
+  const handleSelectAllRoles = (checked) => {
+    if (checked) {
+      setSelectedRoles(ALL_ROLES.map(r => r.value));
+    } else {
+      setSelectedRoles([]);
+    }
+  };
+
+  // 計算授權摘要
+  const getAclSummary = (record) => {
+    const roleCount = record.assignedRoles?.length || 0;
+    const userCount = record.assignedUsers?.length || 0;
+    return { roleCount, userCount, total: roleCount + userCount };
   };
 
   const columns = [
@@ -148,14 +181,33 @@ const AgentPermissions = () => {
       ),
     },
     {
-      title: t('agentPermissions.authorizedUsers'),
-      key: 'users',
-      width: 160,
-      render: (_, record) => (
-        <Badge count={record.assignedUsers.length} style={{ backgroundColor: 'var(--primary-color)' }}>
-          <Tag>{record.assignedUsers.length} / 50 {t('common.person')}</Tag>
-        </Badge>
-      ),
+      title: t('agentPermissions.authorization'),
+      key: 'acl',
+      width: 220,
+      render: (_, record) => {
+        const { roleCount, userCount } = getAclSummary(record);
+        return (
+          <Space size={4}>
+            {roleCount > 0 && (
+              <Tooltip title={record.assignedRoles.map(r => ALL_ROLES.find(ar => ar.value === r)?.label || r).join('、')}>
+                <Tag icon={<TeamOutlined />} color="blue">
+                  {roleCount} {t('agentPermissions.roles')}
+                </Tag>
+              </Tooltip>
+            )}
+            {userCount > 0 && (
+              <Tooltip title={record.assignedUsers.join('、')}>
+                <Tag icon={<UserAddOutlined />} color="green">
+                  {userCount} {t('agentPermissions.users')}
+                </Tag>
+              </Tooltip>
+            )}
+            {roleCount === 0 && userCount === 0 && (
+              <Tag color="default">{t('agentPermissions.noAuthorization')}</Tag>
+            )}
+          </Space>
+        );
+      },
     },
     {
       title: t('common.actions'),
@@ -165,20 +217,21 @@ const AgentPermissions = () => {
         <Button
           type="primary"
           size="small"
-          icon={<UserAddOutlined />}
-          onClick={() => openAssignModal(record)}
+          icon={<SafetyOutlined />}
+          onClick={() => openAclModal(record)}
           style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
         >
-          {t('agentPermissions.assignUsers')}
+          {t('agentPermissions.manageAccess')}
         </Button>
       ),
     },
   ];
 
-  const transferData = userList.map((u) => ({
-    key: String(u.id),
-    title: `${u.name} (${t(`departments.${u.department}`) || u.department})`,
-    description: u.email,
+  // Transfer 資料來源：使用真實使用者列表，key 為 email
+  const transferData = allUsers.map((u) => ({
+    key: u.email,
+    title: `${u.name} (${u.email})`,
+    description: u.department || '',
   }));
 
   return (
@@ -204,31 +257,76 @@ const AgentPermissions = () => {
       <Modal
         title={
           <span>
-            <UserAddOutlined style={{ marginRight: 8 }} />
-            {t('agentPermissions.assignUsersTitle', { name: transferModal?.name })}
+            <SafetyOutlined style={{ marginRight: 8 }} />
+            {t('agentPermissions.manageAccessTitle', { name: aclModal?.name })}
           </span>
         }
-        open={!!transferModal}
-        onCancel={() => setTransferModal(null)}
-        onOk={handleAssignSave}
+        open={!!aclModal}
+        onCancel={() => setAclModal(null)}
+        onOk={handleAclSave}
         okText={t('common.save')}
         cancelText={t('common.cancel')}
-        width={650}
+        width={700}
+        confirmLoading={saving}
         okButtonProps={{ style: { background: 'var(--primary-color)', borderColor: 'var(--primary-color)' } }}
       >
-        <p style={{ marginBottom: 16, color: '#666' }}>
-          {t('agentPermissions.maxUsers', { count: targetKeys.length })}
-        </p>
-        <Transfer
-          dataSource={transferData}
-          targetKeys={targetKeys}
-          onChange={setTargetKeys}
-          render={(item) => item.title}
-          titles={[t('agentPermissions.unauthorized'), t('agentPermissions.authorized')]}
-          listStyle={{ width: 260, height: 300 }}
-          showSearch
-          searchPlaceholder={t('agentPermissions.searchUsers')}
-        />
+        {/* 角色授權區塊 */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontWeight: 600, fontSize: 14 }}>
+              <TeamOutlined style={{ marginRight: 6 }} />
+              {t('agentPermissions.roleAuthorization')}
+            </span>
+            <Checkbox
+              checked={selectedRoles.length === ALL_ROLES.length}
+              indeterminate={selectedRoles.length > 0 && selectedRoles.length < ALL_ROLES.length}
+              onChange={(e) => handleSelectAllRoles(e.target.checked)}
+            >
+              {t('agentPermissions.selectAllRoles')}
+            </Checkbox>
+          </div>
+          <p style={{ marginBottom: 8, color: '#888', fontSize: 12 }}>
+            {t('agentPermissions.roleAuthorizationDesc')}
+          </p>
+          <Checkbox.Group
+            value={selectedRoles}
+            onChange={setSelectedRoles}
+            style={{ width: '100%' }}
+          >
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px' }}>
+              {ALL_ROLES.map((role) => (
+                <Checkbox key={role.value} value={role.value}>
+                  {role.label}
+                </Checkbox>
+              ))}
+            </div>
+          </Checkbox.Group>
+        </div>
+
+        <Divider style={{ margin: '12px 0' }} />
+
+        {/* 個別使用者授權區塊 */}
+        <div>
+          <div style={{ marginBottom: 8 }}>
+            <span style={{ fontWeight: 600, fontSize: 14 }}>
+              <UserAddOutlined style={{ marginRight: 6 }} />
+              {t('agentPermissions.userAuthorization')}
+            </span>
+          </div>
+          <p style={{ marginBottom: 8, color: '#888', fontSize: 12 }}>
+            {t('agentPermissions.userAuthorizationDesc', { count: targetKeys.length })}
+          </p>
+          <Transfer
+            dataSource={transferData}
+            targetKeys={targetKeys}
+            onChange={setTargetKeys}
+            render={(item) => item.title}
+            titles={[t('agentPermissions.unauthorized'), t('agentPermissions.authorized')]}
+            listStyle={{ width: 280, height: 260 }}
+            showSearch
+            searchPlaceholder={t('agentPermissions.searchUsers')}
+          />
+        </div>
       </Modal>
     </div>
   );

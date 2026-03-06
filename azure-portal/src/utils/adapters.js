@@ -116,6 +116,7 @@ export function adaptAgent(apiData) {
   if (!apiData) return null;
 
   const configJson = apiData.agent_config_json || {};
+  const acl = apiData.acl || null;
 
   return {
     id: apiData.agent_id,
@@ -125,6 +126,11 @@ export function adaptAgent(apiData) {
     icon: apiData.icon ?? '',
     color: apiData.color ?? '',
     description: apiData.description ?? '',
+    acl: acl ? {
+      authorizedRoles: acl.authorized_roles || [],
+      authorizedUsers: acl.authorized_users || [],
+      exceptionList: acl.exception_list || [],
+    } : null,
   };
 }
 

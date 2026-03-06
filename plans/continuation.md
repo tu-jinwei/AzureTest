@@ -432,10 +432,35 @@ services/storage_service.py      # 本地檔案儲存服務（uploads/ 目錄管
 
 ### ✅ Bug 修復批次（2026-03-06）
 
-1. **AgentPermissions ACL 儲存 Bug**
-   - `handleAssignSave()` 原本只更新前端 state，未呼叫後端 API
-   - 修復：改為 `async`，呼叫 `agentAPI.updateACL()` 後再更新前端 state + 重新載入
-   - 影響檔案：`azure-portal/src/pages/settings/AgentPermissions.jsx`
+1. **AgentPermissions ACL 完整修復 + 角色授權 UI**
+   - **原始問題**：修改 Agent 權限後重新整理頁面會回復原狀；super_admin 不受 ACL 限制
+   - **根因分析**：
+     - 後端 `GET /agents/all` 的 `AgentResponse` 沒有回傳 ACL 資料
+     - 前端 `fetchAgents()` 因拿不到 ACL，`assignedUsers` 永遠 fallback 到硬編碼的 `[1, 2]`
+     - Transfer 元件使用 mock `userList`（靜態假資料），key 是數字 id 而非 email
+     - `GET /api/agents` 中 `super_admin` / `platform_admin` 跳過 ACL 檢查
+   - **修復（後端）**：
+     - `models/schemas.py` 新增 `AgentACLInfo` schema（`authorized_roles`, `authorized_users`, `exception_list`）
+     - `AgentResponse` 新增 `acl: Optional[AgentACLInfo]` 欄位
+     - `agent_api.py` 的 `list_all_agents()` 批次查詢 `AgentACL` 表，建立 `acl_map`
+     - `_agent_to_response()` 接受可選的 `acl_data` 參數，轉換為 `AgentACLInfo` 回傳
+     - `list_agents()` 移除 `access_all_agents` 跳過邏輯，所有角色都受 ACL 限制
+   - **修復（前端）**：
+     - `adapters.js` 的 `adaptAgent()` 新增 `acl` 欄位轉換（`authorized_users` → `authorizedUsers` 等）
+     - `AgentPermissions.jsx` 完整重寫：
+       - `fetchUsers()` 從 `userAPI.list()` 取得真實使用者列表（取代 mock `userList`）
+       - `fetchAgents()` 從 `a.acl?.authorizedUsers` + `a.acl?.authorizedRoles` 取得授權資料
+       - **角色授權區塊**：Checkbox Group 勾選角色（含全選/取消全選），勾選的角色中所有使用者都可存取
+       - **個別使用者授權區塊**：Transfer 元件指派個別使用者（key 為 email）
+       - 表格「授權狀態」欄位顯示角色數 + 使用者數（含 Tooltip 顯示詳情）
+       - `handleAclSave()` 同時送出 `authorized_roles` + `authorized_users` + `exception_list`
+     - 5 個 i18n 翻譯檔（zh-TW/en/ja/th/vi）新增 10+ 個翻譯 key
+   - **ACL 規則**：
+     - 所有角色（包括 `super_admin`）都受 ACL 限制
+     - 只有在 `authorized_users` 或 `authorized_roles` 中的使用者才能看到 Agent
+     - 沒有 ACL 記錄或 ACL 為空的 Agent 不會顯示給任何人
+     - 管理頁面 `GET /agents/all` 不受 ACL 限制（需要 `manage_agent_permissions` 權限）
+   - 影響檔案：`models/schemas.py`, `agent_api.py`, `adapters.js`, `AgentPermissions.jsx`, 5 個 i18n 翻譯檔
 
 2. **首頁 Agent 卡片點擊後未自動選擇 Agent**
    - `Home.jsx` 的 `navigate('/agent-store/chat')` 改為帶 `?agent=xxx` 參數
