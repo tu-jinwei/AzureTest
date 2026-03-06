@@ -30,7 +30,7 @@ import {
   CloudUploadOutlined,
 } from '@ant-design/icons';
 import { libraryAPI } from '../../services/api';
-import { adaptLibraryDocs } from '../../utils/adapters';
+import { adaptLibraryDocs, adaptCatalogs } from '../../utils/adapters';
 import { libraries as mockLibraries, userList } from '../../data/mockData';
 import { useCountry } from '../../contexts/CountryContext';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -41,6 +41,7 @@ const LibrarySettings = () => {
   const { t } = useLanguage();
 
   const [libraries, setLibraries] = useState([]);
+  const [catalogs, setCatalogs] = useState([]); // 館名目錄（從 catalog API 取得）
   const [loading, setLoading] = useState(true);
   const [uploadModal, setUploadModal] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
@@ -49,7 +50,7 @@ const LibrarySettings = () => {
   const [form] = Form.useForm();
 
   // Modal 中的館名選項（根據 Modal 中選擇的目標國家動態載入）
-  const [modalLibraries, setModalLibraries] = useState([]);
+  const [modalCatalogs, setModalCatalogs] = useState([]);
   const [modalLibLoading, setModalLibLoading] = useState(false);
 
   // 新增館名
@@ -61,15 +62,32 @@ const LibrarySettings = () => {
   const [editForm] = Form.useForm();
   const [editFileList, setEditFileList] = useState([]); // 追加上傳的檔案列表
 
-  // 從後端載入圖書館資料（列表頁面用）
+  // 從後端載入圖書館資料（列表頁面用）— 同時載入 catalogs + 文件
   const fetchLibrary = async (country) => {
     setLoading(true);
     try {
-      const res = await libraryAPI.listAll(country);
-      setLibraries(adaptLibraryDocs(res.data));
+      const [docsRes, catRes] = await Promise.all([
+        libraryAPI.listAll(country),
+        libraryAPI.listCatalogs(country).catch(() => ({ data: [] })),
+      ]);
+      let cats = adaptCatalogs(catRes.data);
+      const libs = adaptLibraryDocs(docsRes.data, cats.length > 0 ? cats : undefined);
+      // 若 catalog 表尚未建立或為空，從文件資料中提取館名作為 fallback
+      if (cats.length === 0 && libs.length > 0) {
+        cats = libs.map((lib) => ({
+          catalogId: lib.id,
+          name: lib.name,
+          description: '',
+          docCount: lib.documents.length,
+          createdAt: null,
+        }));
+      }
+      setCatalogs(cats);
+      setLibraries(libs);
     } catch (err) {
       console.warn('圖書館 API 失敗，使用 mock 資料', err);
       setLibraries(mockLibraries);
+      setCatalogs([]);
     } finally {
       setLoading(false);
     }
@@ -79,42 +97,57 @@ const LibrarySettings = () => {
     fetchLibrary(effectiveCountry);
   }, [effectiveCountry]);
 
-  // 載入特定國家的館名列表（Modal 用）
+  // 載入特定國家的館名列表（Modal 用）— 優先用 catalog API，fallback 到文件列表
   const fetchModalLibraries = useCallback(async (country) => {
     setModalLibLoading(true);
     try {
       const countryParam = isSuperAdmin ? country : undefined;
-      const res = await libraryAPI.listAll(countryParam);
-      setModalLibraries(adaptLibraryDocs(res.data));
+      const catRes = await libraryAPI.listCatalogs(countryParam);
+      const cats = adaptCatalogs(catRes.data);
+      if (cats.length > 0) {
+        setModalCatalogs(cats);
+      } else {
+        // catalog 表為空時，從文件列表中提取館名作為 fallback
+        const fallback = libraries.map((lib) => ({ catalogId: lib.id, name: lib.name, docCount: lib.documents.length }));
+        setModalCatalogs(fallback.length > 0 ? fallback : catalogs);
+      }
     } catch {
-      // 失敗時使用列表頁面的資料
-      setModalLibraries(libraries);
+      // API 失敗時使用列表頁面的資料
+      const fallback = libraries.map((lib) => ({ catalogId: lib.id, name: lib.name, docCount: lib.documents.length }));
+      setModalCatalogs(fallback.length > 0 ? fallback : catalogs);
     } finally {
       setModalLibLoading(false);
     }
-  }, [isSuperAdmin, libraries]);
+  }, [isSuperAdmin, catalogs, libraries]);
 
   // 扁平化所有文件
   const allDocs = libraries.flatMap((lib) =>
     lib.documents.map((doc) => ({ ...doc, libraryName: lib.name, libraryId: lib.id }))
   );
 
-  // Modal 中的館名選項
-  const modalLibraryOptions = modalLibraries.map((lib) => ({ value: lib.name, label: lib.name }));
+  // Modal 中的館名選項（從 catalog 取得）
+  const modalLibraryOptions = modalCatalogs.map((cat) => ({ value: cat.name, label: cat.name }));
 
-  const handleAddNewLibrary = () => {
+  const handleAddNewLibrary = async () => {
     const trimmed = newLibraryName.trim();
     if (!trimmed) return;
     // 檢查是否已存在
-    if (modalLibraries.some((lib) => lib.name === trimmed)) {
+    if (modalCatalogs.some((cat) => cat.name === trimmed)) {
       message.warning(t('librarySettings.libraryExists'));
       return;
     }
-    // 加入到 modalLibraries 選項中，並設定到表單
-    setModalLibraries((prev) => [...prev, { id: `new-${Date.now()}`, name: trimmed, documents: [] }]);
-    form.setFieldsValue({ libraryName: trimmed });
-    setNewLibraryName('');
-    message.success(t('librarySettings.libraryAdded', { name: trimmed }));
+    // 呼叫後端 API 建立 catalog
+    try {
+      const countryParam = isSuperAdmin ? form.getFieldValue('target_country') : undefined;
+      await libraryAPI.createCatalog({ library_name: trimmed }, countryParam);
+      // 加入到 modalCatalogs 選項中，並設定到表單
+      setModalCatalogs((prev) => [...prev, { catalogId: `new-${Date.now()}`, name: trimmed, docCount: 0 }]);
+      form.setFieldsValue({ libraryName: trimmed });
+      setNewLibraryName('');
+      message.success(t('librarySettings.libraryAdded', { name: trimmed }));
+    } catch (err) {
+      message.error(t('librarySettings.addLibraryFailed') + '：' + (err.response?.data?.detail || err.message));
+    }
   };
 
   const handleOpenUpload = () => {
@@ -128,7 +161,7 @@ const LibrarySettings = () => {
       fetchModalLibraries(targetCountry);
     } else {
       // 非 super_admin 載入自己國家的館名
-      setModalLibraries(libraries);
+      setModalCatalogs(catalogs);
     }
     setUploadModal(true);
   };
@@ -300,14 +333,14 @@ const LibrarySettings = () => {
     }
   };
 
-  // 計算每個館的文件數量
-  const libraryStats = libraries.map((lib) => ({
-    name: lib.name,
-    docCount: lib.documents.length,
+  // 館名管理統計（從 catalogs 取得，確保空館也出現）
+  const libraryStats = catalogs.map((cat) => ({
+    name: cat.name,
+    docCount: cat.docCount ?? 0,
   }));
 
-  // 編輯 Modal 中的館名選項（使用當前列表頁面的館名）
-  const editLibraryOptions = libraries.map((lib) => ({ value: lib.name, label: lib.name }));
+  // 編輯 Modal 中的館名選項（從 catalogs 取得）
+  const editLibraryOptions = catalogs.map((cat) => ({ value: cat.name, label: cat.name }));
 
   const columns = [
     {

@@ -63,40 +63,49 @@ const AgentChat = () => {
     fetchAgents();
   }, []);
 
-  // 從 URL 參數載入歷史對話（從 ChatHistory 跳轉過來）
+  // 從 URL 參數載入（支援兩種情境）：
+  // 1. ChatHistory 跳轉：?session=xxx&agent=xxx → 載入歷史訊息
+  // 2. Home Agent 卡片：?agent=xxx → 自動選擇 Agent，開始新對話
   useEffect(() => {
     if (loading || agents.length === 0) return;
 
     const urlSession = searchParams.get('session');
     const urlAgent = searchParams.get('agent');
 
-    if (urlSession && urlAgent) {
-      // 選擇 Agent
+    if (urlAgent) {
       const agent = agents.find((a) => a.id === urlAgent);
       if (agent) {
         setSelectedAgent(agent);
-        setSessionId(urlSession);
 
-        // 載入歷史訊息
-        const loadHistory = async () => {
-          try {
-            const res = await chatAPI.sessionDetail(urlSession);
-            const detail = adaptSessionDetail(res.data);
-            if (detail?.messages?.length > 0) {
-              setMessages(
-                detail.messages.map((msg) => ({
-                  role: msg.role,
-                  content: msg.content,
-                  time: msg.time || '',
-                  isStreaming: false,
-                }))
-              );
+        if (urlSession) {
+          // 情境 1：從 ChatHistory 繼續對話
+          setSessionId(urlSession);
+
+          // 載入歷史訊息
+          const loadHistory = async () => {
+            try {
+              const res = await chatAPI.sessionDetail(urlSession);
+              const detail = adaptSessionDetail(res.data);
+              if (detail?.messages?.length > 0) {
+                setMessages(
+                  detail.messages.map((msg) => ({
+                    role: msg.role,
+                    content: msg.content,
+                    time: msg.time || '',
+                    isStreaming: false,
+                  }))
+                );
+              }
+            } catch (err) {
+              console.warn('載入歷史訊息失敗', err);
             }
-          } catch (err) {
-            console.warn('載入歷史訊息失敗', err);
-          }
-        };
-        loadHistory();
+          };
+          loadHistory();
+        } else {
+          // 情境 2：從 Home 頁面點擊 Agent 卡片，開始新對話
+          setMessages([]);
+          setSessionId(null);
+        }
       }
 
       // 清除 URL 參數（避免重新整理時重複載入）

@@ -139,6 +139,40 @@ export function adaptAgents(apiDataList) {
 }
 
 // ============================================================
+// 圖書館館名目錄 (Library Catalog)  —  後端 → 前端
+// ============================================================
+
+/**
+ * 單筆 Catalog：後端 LibraryCatalogResponse → 前端 catalog 物件
+ *
+ * 後端欄位 (schemas.LibraryCatalogResponse):
+ *   catalog_id, library_name, description, doc_count, created_at
+ *
+ * @param {object} apiData - 後端 API 回傳的 Catalog 物件
+ * @returns {object} 前端格式的 Catalog 物件
+ */
+export function adaptCatalog(apiData) {
+  if (!apiData) return null;
+  return {
+    catalogId: apiData.catalog_id,
+    name: apiData.library_name ?? '',
+    description: apiData.description ?? '',
+    docCount: apiData.doc_count ?? 0,
+    createdAt: apiData.created_at ?? null,
+  };
+}
+
+/**
+ * 多筆 Catalog 轉換
+ * @param {Array} apiDataList - 後端 Catalog 陣列
+ * @returns {Array} 前端格式的 Catalog 陣列
+ */
+export function adaptCatalogs(apiDataList) {
+  if (!Array.isArray(apiDataList)) return [];
+  return apiDataList.map(adaptCatalog).filter(Boolean);
+}
+
+// ============================================================
 // 圖書館文件 (Library Document)  —  後端 → 前端
 // ============================================================
 
@@ -180,12 +214,28 @@ export function adaptLibraryDoc(apiData) {
  *   [{ id, name, documents: [...] }, ...]
  *
  * @param {Array} apiDataList - 後端文件扁平陣列
+ * @param {Array} [catalogs] - 可選的 catalog 列表（確保空館也出現）
+ *   每個 catalog: { catalogId, name, description, docCount, createdAt }
  * @returns {Array} 前端格式的圖書館分組陣列
  */
-export function adaptLibraryDocs(apiDataList) {
-  if (!Array.isArray(apiDataList)) return [];
+export function adaptLibraryDocs(apiDataList, catalogs) {
+  if (!Array.isArray(apiDataList)) apiDataList = [];
 
   const groupMap = new Map();
+
+  // 如果有 catalogs，先建立空的分組（確保空館也出現）
+  if (Array.isArray(catalogs) && catalogs.length > 0) {
+    catalogs.forEach((cat, idx) => {
+      const catName = cat.name || cat.library_name || '';
+      if (catName && !groupMap.has(catName)) {
+        groupMap.set(catName, {
+          id: cat.catalogId || `cat-${idx + 1}`,
+          name: catName,
+          documents: [],
+        });
+      }
+    });
+  }
 
   apiDataList.forEach((item) => {
     const doc = adaptLibraryDoc(item);

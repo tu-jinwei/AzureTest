@@ -67,6 +67,7 @@ def drop_local_tables(engine, country_code: str):
     table_names = [
         "file_lifecycle",
         "local_library",
+        "local_library_catalog",
         "local_notice",
         "login_audit",
         "otp_vault",
@@ -103,6 +104,7 @@ def create_local_tables(engine, country_code: str):
     print(f"   ✅ [{country_code}] otp_vault")
     print(f"   ✅ [{country_code}] login_audit")
     print(f"   ✅ [{country_code}] local_notice")
+    print(f"   ✅ [{country_code}] local_library_catalog")
     print(f"   ✅ [{country_code}] local_library")
     print(f"   ✅ [{country_code}] file_lifecycle")
     print(f"📦 Local DB [{country_code}] 所有表已建立")
@@ -249,9 +251,9 @@ def seed_agent_acl(session: Session, agent_ids: list):
 
 
 def seed_local_library(session: Session, country_code: str):
-    """插入各國圖書館 seed 資料到 Local DB"""
+    """插入各國圖書館 seed 資料到 Local DB（含 catalog 記錄）"""
     print(f"\n📚 正在插入 [{country_code}] 圖書館資料...")
-    from models.local_models import LocalLibrary
+    from models.local_models import LocalLibrary, LocalLibraryCatalog
 
     # 各國的圖書館資料
     library_data = {
@@ -324,8 +326,24 @@ def seed_local_library(session: Session, country_code: str):
 
     now = datetime.now(timezone.utc)
     total = 0
+    catalog_count = 0
     all_roles = ["user", "user_manager", "library_manager", "platform_admin", "super_admin"]
 
+    # 先建立 catalog 記錄
+    for lib in libraries:
+        catalog = LocalLibraryCatalog(
+            catalog_id=uuid.uuid4(),
+            library_name=lib["library_name"],
+            created_at=now,
+        )
+        session.add(catalog)
+        catalog_count += 1
+        print(f"   📁 [{country_code}] Catalog: {lib['library_name']}")
+
+    session.commit()
+    print(f"📁 [{country_code}] 已插入 {catalog_count} 筆 Catalog 資料")
+
+    # 再建立文件記錄
     for lib in libraries:
         for doc in lib["documents"]:
             entry = LocalLibrary(

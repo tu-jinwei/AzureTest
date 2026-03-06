@@ -46,6 +46,16 @@ class LocalNotice(LocalBase):
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
+class LocalLibraryCatalog(LocalBase):
+    """圖書館館名目錄（各國獨立）— 館的生命週期由管理者手動控制"""
+    __tablename__ = "local_library_catalog"
+
+    catalog_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    library_name = Column(String(255), nullable=False, unique=True)
+    description = Column(Text)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
 class LocalLibrary(LocalBase):
     """本地圖書館（各國獨立）"""
     __tablename__ = "local_library"

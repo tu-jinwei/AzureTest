@@ -82,16 +82,28 @@ const AgentPermissions = () => {
     setTransferModal(agent);
   };
 
-  const handleAssignSave = () => {
-    setAgentData((prev) =>
-      prev.map((a) =>
-        a.id === transferModal.id
-          ? { ...a, assignedUsers: targetKeys.map(Number) }
-          : a
-      )
-    );
-    message.success(t('agentPermissions.permissionUpdated'));
-    setTransferModal(null);
+  const handleAssignSave = async () => {
+    if (!transferModal) return;
+    try {
+      // 呼叫後端 API 更新 ACL
+      await agentAPI.updateACL(transferModal.id, {
+        authorized_users: targetKeys,
+      });
+      // 更新前端 state
+      setAgentData((prev) =>
+        prev.map((a) =>
+          a.id === transferModal.id
+            ? { ...a, assignedUsers: targetKeys.map(Number) }
+            : a
+        )
+      );
+      message.success(t('agentPermissions.permissionUpdated'));
+      setTransferModal(null);
+      // 重新載入以確保資料一致
+      fetchAgents();
+    } catch (err) {
+      message.error(t('agentPermissions.updateFailed') + '：' + (err.response?.data?.detail || err.message));
+    }
   };
 
   const columns = [

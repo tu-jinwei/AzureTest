@@ -113,6 +113,19 @@ class AnnouncementResponse(BaseModel):
 
 
 # ===== 圖書館 =====
+class LibraryCatalogCreate(BaseModel):
+    library_name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+
+
+class LibraryCatalogResponse(BaseModel):
+    catalog_id: str
+    library_name: str
+    description: Optional[str] = None
+    doc_count: int = 0
+    created_at: Optional[datetime] = None
+
+
 class LibraryDocCreate(BaseModel):
     library_name: str = Field(..., min_length=1, max_length=255)
     name: str = Field(..., min_length=1, max_length=255)

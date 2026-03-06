@@ -50,17 +50,21 @@ def _resolve_country(payload: dict, query_country: Optional[str] = None) -> str:
 @router.get("", response_model=List[AnnouncementResponse])
 async def list_announcements(
     country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
+    limit: Optional[int] = Query(None, description="回傳筆數上限（不指定則回傳全部）"),
     payload: dict = Depends(get_current_user_payload),
 ):
     """取得公告列表（已發布的）"""
     target_country = _resolve_country(payload, country)
     session = await data_router.get_local_pg(target_country)
     try:
-        result = await session.execute(
+        stmt = (
             select(LocalNotice)
             .where(LocalNotice.publish_status == "published")
             .order_by(LocalNotice.created_at.desc())
         )
+        if limit and limit > 0:
+            stmt = stmt.limit(limit)
+        result = await session.execute(stmt)
         notices = result.scalars().all()
         return [_notice_to_response(n) for n in notices]
     finally:

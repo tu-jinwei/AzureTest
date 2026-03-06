@@ -1,5 +1,5 @@
 """
-圖書館 API：文件 CRUD + 權限設定 + 上傳/下載
+圖書館 API：文件 CRUD + 權限設定 + 上傳/下載 + 館名目錄管理
 圖書館存在 Local DB（各國 PostgreSQL），國家隔離
 super_admin 可跨國查看（透過 ?country=XX 參數）
 """
@@ -15,9 +15,11 @@ from core.data_router import data_router
 from core.local_database import local_db_factory
 from core.permissions import has_permission, require_permission
 from core.security import get_current_user_payload
-from models.local_models import LocalLibrary
+from models.local_models import LocalLibrary, LocalLibraryCatalog
 from models.schemas import (
     LibraryAuthUpdate,
+    LibraryCatalogCreate,
+    LibraryCatalogResponse,
     LibraryDocCreate,
     LibraryDocResponse,
     LibraryDocUpdate,
@@ -48,6 +50,88 @@ def _resolve_country(payload: dict, query_country: Optional[str] = None) -> str:
 
     return user_country
 
+
+# ===== 館名目錄 (Catalog) API =====
+
+@router.get("/catalogs", response_model=List[LibraryCatalogResponse])
+async def list_catalogs(
+    country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
+    payload: dict = Depends(get_current_user_payload),
+):
+    """取得所有館名列表（含各館文件數量）"""
+    target_country = _resolve_country(payload, country)
+
+    session = await data_router.get_local_pg(target_country)
+    try:
+        # 取得所有 catalog
+        cat_result = await session.execute(
+            select(LocalLibraryCatalog).order_by(LocalLibraryCatalog.library_name)
+        )
+        catalogs = cat_result.scalars().all()
+
+        # 計算每個館的文件數量
+        count_result = await session.execute(
+            select(
+                LocalLibrary.library_name,
+                func.count(LocalLibrary.doc_id).label("doc_count"),
+            ).group_by(LocalLibrary.library_name)
+        )
+        count_map = {row.library_name: row.doc_count for row in count_result}
+    finally:
+        await session.close()
+
+    return [
+        LibraryCatalogResponse(
+            catalog_id=str(cat.catalog_id),
+            library_name=cat.library_name,
+            description=cat.description,
+            doc_count=count_map.get(cat.library_name, 0),
+            created_at=cat.created_at,
+        )
+        for cat in catalogs
+    ]
+
+
+@router.post("/catalogs", response_model=LibraryCatalogResponse)
+async def create_catalog(
+    body: LibraryCatalogCreate,
+    country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
+    payload: dict = Depends(require_permission("manage_library")),
+):
+    """手動建立新館（不需要同時上傳文件）"""
+    target_country = _resolve_country(payload, country)
+
+    session = await data_router.get_local_pg(target_country)
+    try:
+        # 檢查是否已存在
+        existing = await session.execute(
+            select(LocalLibraryCatalog).where(
+                LocalLibraryCatalog.library_name == body.library_name
+            )
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail=f"館名「{body.library_name}」已存在")
+
+        catalog = LocalLibraryCatalog(
+            library_name=body.library_name,
+            description=body.description,
+        )
+        session.add(catalog)
+        await session.commit()
+        await session.refresh(catalog)
+    finally:
+        await session.close()
+
+    return LibraryCatalogResponse(
+        catalog_id=str(catalog.catalog_id),
+        library_name=catalog.library_name,
+        description=catalog.description,
+        doc_count=0,
+        created_at=catalog.created_at,
+    )
+
+
+# ===== 文件列表 API =====
 
 @router.get("", response_model=List[LibraryDocResponse])
 async def list_library(
@@ -143,7 +227,23 @@ async def upload_document(
     """上傳文件至本國圖書館（支援多檔案）"""
     target_country = _resolve_country(payload, country)
 
-    # 先建立 DB 記錄
+    # 自動建立 catalog（如果不存在）
+    session = await data_router.get_local_pg(target_country)
+    try:
+        existing_cat = await session.execute(
+            select(LocalLibraryCatalog).where(
+                LocalLibraryCatalog.library_name == library_name
+            )
+        )
+        if not existing_cat.scalar_one_or_none():
+            new_cat = LocalLibraryCatalog(library_name=library_name)
+            session.add(new_cat)
+            await session.commit()
+            logger.info(f"自動建立 catalog: {library_name} ({target_country})")
+    finally:
+        await session.close()
+
+    # 建立文件 DB 記錄
     session = await data_router.get_local_pg(target_country)
     try:
         doc = LocalLibrary(
@@ -232,7 +332,7 @@ async def delete_library(
     country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
     payload: dict = Depends(require_permission("manage_library")),
 ):
-    """刪除整個館（僅限空館）"""
+    """刪除整個館（僅限空館，同時刪除 catalog 記錄）"""
     target_country = _resolve_country(payload, country)
 
     session = await data_router.get_local_pg(target_country)
@@ -245,16 +345,22 @@ async def delete_library(
         )
         doc_count = result.scalar()
 
-        if doc_count is None or doc_count == 0:
-            # 確認館名是否曾經存在（doc_count == 0 可能代表館已空或從未存在）
-            # 由於館名不是獨立的表，doc_count == 0 表示該館已經沒有文件
-            # 回傳成功（館名自然消失）
-            pass
-        elif doc_count > 0:
+        if doc_count and doc_count > 0:
             raise HTTPException(
                 status_code=400,
                 detail=f"無法刪除：館「{library_name}」中還有 {doc_count} 個文件，請先刪除所有文件"
             )
+
+        # 刪除 catalog 記錄
+        del_result = await session.execute(
+            delete(LocalLibraryCatalog).where(
+                LocalLibraryCatalog.library_name == library_name
+            )
+        )
+        if del_result.rowcount == 0:
+            raise HTTPException(status_code=404, detail=f"館「{library_name}」不存在")
+
+        await session.commit()
     finally:
         await session.close()
 

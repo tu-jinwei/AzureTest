@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Modal, Button, Pagination, Empty, Spin, message, Tag, List } from 'antd';
 import {
   BookOutlined,
@@ -16,7 +17,7 @@ import {
   LoadingOutlined,
 } from '@ant-design/icons';
 import { libraryAPI } from '../services/api';
-import { adaptLibraryDocs } from '../utils/adapters';
+import { adaptLibraryDocs, adaptCatalogs } from '../utils/adapters';
 import { libraries as mockLibraries } from '../data/mockData';
 import { useCountry } from '../contexts/CountryContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -62,6 +63,7 @@ const DOCS_PER_PAGE = 4;
 const Library = () => {
   const { effectiveCountry } = useCountry();
   const { t } = useLanguage();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [libraries, setLibraries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -83,11 +85,18 @@ const Library = () => {
   const fetchLibrary = async (country) => {
     setLoading(true);
     try {
-      const res = await libraryAPI.list(country);
-      setLibraries(adaptLibraryDocs(res.data));
+      const [docsRes, catRes] = await Promise.all([
+        libraryAPI.list(country),
+        libraryAPI.listCatalogs(country).catch(() => ({ data: [] })),
+      ]);
+      const cats = adaptCatalogs(catRes.data);
+      const libs = adaptLibraryDocs(docsRes.data, cats.length > 0 ? cats : undefined);
+      setLibraries(libs);
+      return libs;
     } catch (err) {
       console.warn('圖書館 API 失敗，使用 mock 資料', err);
       setLibraries(mockLibraries);
+      return mockLibraries;
     } finally {
       setLoading(false);
     }
@@ -95,7 +104,22 @@ const Library = () => {
 
   useEffect(() => {
     setSelectedLibrary(null);
-    fetchLibrary(effectiveCountry);
+    fetchLibrary(effectiveCountry).then((libs) => {
+      // 從 URL 參數自動打開文件（從 Home 頁面點擊圖書館卡片跳轉）
+      const urlDocId = searchParams.get('doc');
+      if (urlDocId && libs?.length > 0) {
+        for (const lib of libs) {
+          const doc = lib.documents?.find((d) => String(d.id) === urlDocId);
+          if (doc) {
+            setSelectedLibrary(lib);
+            setSelectedDoc(doc);
+            break;
+          }
+        }
+        // 清除 URL 參數（避免重新整理時重複觸發）
+        setSearchParams({}, { replace: true });
+      }
+    });
   }, [effectiveCountry]);
 
   const getPage = (libId) => pageMap[libId] || 1;
@@ -482,8 +506,9 @@ const Library = () => {
         onCancel={handleClosePreviewModal}
         footer={null}
         width="90vw"
-        style={{ top: 20 }}
-        styles={{ body: { padding: 0, height: 'calc(90vh - 55px)' } }}
+        style={{ top: 20, paddingBottom: 20 }}
+        styles={{ body: { padding: 0, height: 'calc(100vh - 40px - 55px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
+        wrapClassName="no-scroll-modal"
       >
         {/* 多 PDF 檔案切換 */}
         {selectedDoc?.files?.filter((f) => isPdfFile(f.filename)).length > 1 && (

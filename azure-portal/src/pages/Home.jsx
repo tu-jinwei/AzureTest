@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Modal, Button, Tag, Spin, message, List } from 'antd';
+import { Modal, Button, Tag, Spin, message, List, Input, Pagination, Empty } from 'antd';
 import {
   SoundOutlined,
   RobotOutlined,
@@ -16,6 +16,8 @@ import {
   EyeOutlined,
   LoadingOutlined,
   FileOutlined,
+  HistoryOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import { announcementAPI, agentAPI, libraryAPI } from '../services/api';
 import { adaptAnnouncements, adaptAgents, adaptLibraryDocsFlat } from '../utils/adapters';
@@ -83,6 +85,14 @@ const Home = () => {
   const [previewFilename, setPreviewFilename] = useState(null);
   // 下載檔案彈窗
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
+  // 全部公告 Modal
+  const [allAnnouncementsModal, setAllAnnouncementsModal] = useState(false);
+  const [allAnnouncements, setAllAnnouncements] = useState([]);
+  const [allAnnouncementsLoading, setAllAnnouncementsLoading] = useState(false);
+  const [announcementSearch, setAnnouncementSearch] = useState('');
+  const [announcementPage, setAnnouncementPage] = useState(1);
+  const ANNOUNCEMENTS_PER_PAGE = 4;
+  const HOME_ANNOUNCEMENTS_LIMIT = 5;
 
   const fetchData = async (country) => {
     setLoading(true);
@@ -242,6 +252,23 @@ const Home = () => {
     }
   };
 
+  // 開啟全部公告 Modal（載入所有公告，含歷史）
+  const handleOpenAllAnnouncements = async () => {
+    setAllAnnouncementsModal(true);
+    setAllAnnouncementsLoading(true);
+    setAnnouncementSearch('');
+    setAnnouncementPage(1);
+    try {
+      const res = await announcementAPI.list(effectiveCountry);
+      setAllAnnouncements(adaptAnnouncements(res.data));
+    } catch (err) {
+      console.warn('載入全部公告失敗', err);
+      setAllAnnouncements(announcements);
+    } finally {
+      setAllAnnouncementsLoading(false);
+    }
+  };
+
   // 下載公告附件
   const handleDownloadAttachment = async (announcement, filename) => {
     try {
@@ -280,15 +307,13 @@ const Home = () => {
     <div className="home-page">
       {/* ===== 公告欄 ===== */}
       <div className="home-section announcement-section">
-        <div className="section-header-row">
-          <h2 className="section-title">
-            <SoundOutlined style={{ marginRight: 8 }} />
-            {t('home.announcementTitle')}
-            <span className="section-subtitle">{t('home.announcementSubtitle')}</span>
-          </h2>
-        </div>
+        <h2 className="section-title">
+          <SoundOutlined style={{ marginRight: 8 }} />
+          {t('home.announcementTitle')}
+          <span className="section-subtitle">{t('home.announcementSubtitle')}</span>
+        </h2>
         <div className="announcement-list">
-          {announcements.filter((a) => a.isNew).map((item) => (
+          {announcements.slice(0, HOME_ANNOUNCEMENTS_LIMIT).map((item) => (
             <div
               key={item.id}
               className="announcement-item"
@@ -303,9 +328,14 @@ const Home = () => {
               )}
             </div>
           ))}
-          {announcements.filter((a) => a.isNew).length === 0 && (
+          {announcements.length === 0 && (
             <div style={{ color: '#999', padding: '12px 0' }}>{t('home.noNewAnnouncements')}</div>
           )}
+          <div style={{ textAlign: 'center', paddingTop: 8 }}>
+            <Button type="link" onClick={handleOpenAllAnnouncements} style={{ color: 'var(--primary-color)' }}>
+              {t('home.viewAllAnnouncements')}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -433,8 +463,9 @@ const Home = () => {
         onCancel={handleClosePreviewModal}
         footer={null}
         width="90vw"
-        style={{ top: 20 }}
-        styles={{ body: { padding: 0, height: 'calc(90vh - 55px)' } }}
+        style={{ top: 20, paddingBottom: 20 }}
+        styles={{ body: { padding: 0, height: 'calc(100vh - 40px - 55px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
+        wrapClassName="no-scroll-modal"
       >
         {/* 多 PDF 檔案切換 */}
         {selectedAnnouncement?.attachments?.filter((a) => isPdfFile(a.name)).length > 1 && (
@@ -507,6 +538,96 @@ const Home = () => {
         />
       </Modal>
 
+      {/* ===== 全部公告 Modal ===== */}
+      <Modal
+        title={
+          <span>
+            <HistoryOutlined style={{ marginRight: 8 }} />
+            {t('home.allAnnouncementsTitle')}
+          </span>
+        }
+        open={allAnnouncementsModal}
+        onCancel={() => setAllAnnouncementsModal(false)}
+        footer={[
+          <Button key="close" onClick={() => setAllAnnouncementsModal(false)}>
+            {t('common.close')}
+          </Button>,
+        ]}
+        width={700}
+        centered
+        styles={{ body: { overflow: 'hidden' } }}
+        wrapClassName="no-scroll-modal"
+      >
+        <Input
+          placeholder={t('home.searchAnnouncements')}
+          prefix={<SearchOutlined />}
+          value={announcementSearch}
+          onChange={(e) => { setAnnouncementSearch(e.target.value); setAnnouncementPage(1); }}
+          style={{ marginBottom: 16 }}
+          allowClear
+        />
+        {allAnnouncementsLoading ? (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <Spin size="large" />
+          </div>
+        ) : (() => {
+          const filtered = allAnnouncements.filter((a) =>
+            !announcementSearch ||
+            a.subject?.toLowerCase().includes(announcementSearch.toLowerCase()) ||
+            a.content?.toLowerCase().includes(announcementSearch.toLowerCase())
+          );
+          const startIdx = (announcementPage - 1) * ANNOUNCEMENTS_PER_PAGE;
+          const paged = filtered.slice(startIdx, startIdx + ANNOUNCEMENTS_PER_PAGE);
+          return (
+            <>
+              {filtered.length === 0 ? (
+                <Empty description={t('common.noData')} />
+              ) : (
+                <List
+                  dataSource={paged}
+                  renderItem={(item) => (
+                    <List.Item
+                      className="all-announcement-item"
+                      onClick={() => { setAllAnnouncementsModal(false); setSelectedAnnouncement(item); }}
+                      style={{ cursor: 'pointer', padding: '8px 16px', borderRadius: 6 }}
+                    >
+                      <List.Item.Meta
+                        title={
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {item.isNew && <Tag color="red" style={{ fontSize: 11 }}>NEW</Tag>}
+                            <span>{item.subject}</span>
+                          </span>
+                        }
+                        description={
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span>{item.date}</span>
+                            {item.attachments?.length > 0 && (
+                              <span><PaperClipOutlined /> {item.attachments.length}</span>
+                            )}
+                          </span>
+                        }
+                      />
+                    </List.Item>
+                  )}
+                />
+              )}
+              {filtered.length > ANNOUNCEMENTS_PER_PAGE && (
+                <div style={{ textAlign: 'center', marginTop: 16 }}>
+                  <Pagination
+                    current={announcementPage}
+                    total={filtered.length}
+                    pageSize={ANNOUNCEMENTS_PER_PAGE}
+                    onChange={setAnnouncementPage}
+                    showSizeChanger={false}
+                    size="small"
+                  />
+                </div>
+              )}
+            </>
+          );
+        })()}
+      </Modal>
+
       {/* ===== Agent Store 預覽 ===== */}
       <div className="home-section agent-section">
         <h2 className="section-title">
@@ -533,7 +654,7 @@ const Home = () => {
                 type="primary"
                 size="small"
                 style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
-                onClick={() => navigate('/agent-store/chat')}
+                onClick={() => navigate(`/agent-store/chat?agent=${agent.id}`)}
               >
                 {t('common.chat')}
               </Button>
@@ -554,7 +675,7 @@ const Home = () => {
             <div
               key={doc.id}
               className="library-preview-card"
-              onClick={() => navigate('/library')}
+              onClick={() => navigate(`/library?doc=${doc.id}`)}
             >
               <div className="library-preview-cover">
                 {docThumbnails[doc.id] ? (

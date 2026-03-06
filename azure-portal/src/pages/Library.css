@@ -252,17 +252,20 @@
   padding: 10px 16px;
   border-bottom: 1px solid var(--border-color);
   background: #fafafa;
+  flex-shrink: 0;
 }
 
 .preview-modal-iframe {
   width: 100%;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   border: none;
 }
 
 .preview-modal-loading {
   width: 100%;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -320,4 +323,9 @@
 
 .download-list-item:hover {
   background: #f0f5ff;
+}
+
+/* === 防止 Modal 外層滾動 === */
+.no-scroll-modal .ant-modal-wrap {
+  overflow: hidden;
 }

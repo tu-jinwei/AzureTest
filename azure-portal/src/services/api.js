@@ -102,9 +102,11 @@ export const agentAPI = {
 
 // ===== 公告 API =====
 export const announcementAPI = {
-  /** @param {string} [country] - 國家代碼（僅 super_admin 可跨國） */
-  list: (country) =>
-    api.get('/announcements', { params: country ? { country } : {} }),
+  /** @param {string} [country] - 國家代碼（僅 super_admin 可跨國）
+   *  @param {number} [limit] - 回傳筆數上限（不指定則回傳全部）
+   */
+  list: (country, limit) =>
+    api.get('/announcements', { params: { ...(country ? { country } : {}), ...(limit ? { limit } : {}) } }),
 
   /** @param {string} [country] - 國家代碼（僅 super_admin 可跨國） */
   listAll: (country) =>
@@ -265,7 +267,7 @@ export const libraryAPI = {
       },
     }),
 
-  /** 刪除整個館（僅限空館）
+  /** 刪除整個館（僅限空館，同時刪除 catalog 記錄）
    * @param {string} libraryName - 館名
    * @param {string} [country] - 國家代碼（僅 super_admin 可跨國）
    */
@@ -273,6 +275,19 @@ export const libraryAPI = {
     api.delete(`/library/by-library/${encodeURIComponent(libraryName)}`, {
       params: country ? { country } : {},
     }),
+
+  /** 取得所有館名列表（含各館文件數量）
+   * @param {string} [country] - 國家代碼（僅 super_admin 可跨國）
+   */
+  listCatalogs: (country) =>
+    api.get('/library/catalogs', { params: country ? { country } : {} }),
+
+  /** 手動建立新館（不需要同時上傳文件）
+   * @param {object} data - { library_name, description? }
+   * @param {string} [country] - 國家代碼（僅 super_admin 可跨國）
+   */
+  createCatalog: (data, country) =>
+    api.post('/library/catalogs', data, { params: country ? { country } : {} }),
 };
 
 // ===== 對話 API =====
