@@ -58,7 +58,7 @@ const getFileIcon = (filename) => {
   }
 };
 
-const DOCS_PER_PAGE = 4;
+const DOCS_PER_PAGE = 6;
 
 const Library = () => {
   const { effectiveCountry } = useCountry();

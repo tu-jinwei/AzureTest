@@ -17,7 +17,7 @@ Agatha Public API 端點：
 """
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from uuid import UUID, uuid4
 
@@ -147,7 +147,7 @@ async def _save_to_portal(
         )
         logger.info(f"✅ 對話已追加: session_id={session_id}")
 
-    # 插入兩條訊息
+    # 插入兩條訊息（assistant 時間戳 +1ms，確保排序正確）
     await messages_col.insert_many([
         {
             "session_id": session_id,
@@ -159,7 +159,7 @@ async def _save_to_portal(
             "session_id": session_id,
             "role": "assistant",
             "content": assistant_message,
-            "created_at": now,
+            "created_at": now + timedelta(milliseconds=1),
         },
     ])
 
@@ -655,8 +655,8 @@ async def get_session_detail(
     if not session_doc:
         raise HTTPException(status_code=404, detail="對話不存在")
 
-    # 查詢所有訊息（時間正序）
-    cursor = messages_col.find({"session_id": session_id}).sort("created_at", 1)
+    # 查詢所有訊息（時間正序，_id 作為次要排序確保相同時間戳的順序正確）
+    cursor = messages_col.find({"session_id": session_id}).sort([("created_at", 1), ("_id", 1)])
     messages = []
     async for msg in cursor:
         messages.append(
@@ -843,7 +843,7 @@ async def _get_session_as_chat_response(session_id: str, email: str) -> ChatResp
     if not session_doc:
         raise HTTPException(status_code=404, detail="對話不存在")
 
-    cursor = messages_col.find({"session_id": session_id}).sort("created_at", 1)
+    cursor = messages_col.find({"session_id": session_id}).sort([("created_at", 1), ("_id", 1)])
     messages = []
     async for msg in cursor:
         messages.append({

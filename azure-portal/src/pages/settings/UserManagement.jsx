@@ -34,7 +34,6 @@ import {
   ROLES,
   ROLE_COLORS,
   countries as mockCountries,
-  DEPARTMENTS,
   canOperateUser,
   getAssignableRoles as getAssignableRolesFallback,
 } from '../../data/mockData';
@@ -598,15 +597,7 @@ const UserManagement = () => {
             label={t('userManagement.departmentLabel')}
             rules={[{ required: true, message: t('userManagement.departmentRequired') }]}
           >
-            <Select
-              placeholder={t('userManagement.departmentPlaceholder')}
-              options={DEPARTMENTS.map((d) => ({
-                value: d,
-                label: t(`departments.${d}`) || d,
-              }))}
-              showSearch
-              optionFilterProp="label"
-            />
+            <Input placeholder={t('userManagement.departmentPlaceholder')} />
           </Form.Item>
           <Form.Item
             name="country"
