@@ -124,6 +124,19 @@ const th = {
     stop: 'หยุด',
     waitingReply: 'AI กำลังตอบกลับ กรุณารอสักครู่...',
     errorReply: 'AI ตอบกลับล้มเหลว กรุณาลองใหม่ภายหลัง',
+    // เซสชันที่เกี่ยวข้อง
+    chatSessions: 'เลือกแชท',
+    selectAgentForSessions: 'เลือก Agent เพื่อดูประวัติแชท',
+    loadingSessions: 'กำลังโหลด...',
+    noSessions: 'ไม่มีประวัติแชท',
+    untitledSession: 'การสนทนาไม่มีชื่อ',
+    messagesUnit: 'ข้อความ',
+    confirmDeleteSession: 'คุณแน่ใจหรือไม่ว่าต้องการลบการสนทนานี้?',
+    sessionDeleted: 'ลบการสนทนาแล้ว',
+    sessionDeleteFailed: 'ลบไม่สำเร็จ',
+    // โมดอล Agent ทั้งหมด
+    viewAllAgents: 'ดู Agent ทั้งหมด ({count} รายการ)',
+    allAgentsTitle: 'AI Agent ทั้งหมด',
   },
 
   // ===== ประวัติแชท =====
@@ -131,6 +144,7 @@ const th = {
     title: 'ประวัติแชท',
     searchPlaceholder: 'ค้นหาการสนทนา...',
     filterAgent: 'กรอง Agent',
+    allAgents: 'Agent ทั้งหมด',
     noRecords: 'ไม่พบบันทึกการสนทนา',
     loadingHistory: 'กำลังโหลดประวัติแชท...',
     continueChat: 'สนทนาต่อ',

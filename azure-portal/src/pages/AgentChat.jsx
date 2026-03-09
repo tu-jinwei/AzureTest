@@ -1,15 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Button, Tag, Input, Select, Empty, Spin, message as antdMessage } from 'antd';
+import { Button, Tag, Input, Select, Empty, Spin, Popconfirm, message as antdMessage } from 'antd';
 import {
   SendOutlined,
   RobotOutlined,
   StopOutlined,
   LoadingOutlined,
   PlusOutlined,
+  SelectOutlined,
+  ClockCircleOutlined,
+  MessageOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import { useSearchParams } from 'react-router-dom';
 import { agentAPI, chatAPI } from '../services/api';
-import { adaptAgents, adaptSessionDetail } from '../utils/adapters';
+import { adaptAgents, adaptSessionList, adaptSessionDetail } from '../utils/adapters';
 import { agents as mockAgents } from '../data/mockData';
 import { useLanguage } from '../contexts/LanguageContext';
 import './AgentChat.css';
@@ -24,6 +28,10 @@ const AgentChat = () => {
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState(null);
+
+  // Session 列表
+  const [sessions, setSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
 
   // 對話狀態
   const [messages, setMessages] = useState([]);
@@ -62,6 +70,33 @@ const AgentChat = () => {
     };
     fetchAgents();
   }, []);
+
+  // 當選擇 Agent 時載入該 Agent 的 Session 列表
+  const fetchSessions = useCallback(async (agentId) => {
+    if (!agentId) {
+      setSessions([]);
+      return;
+    }
+    setSessionsLoading(true);
+    try {
+      const res = await chatAPI.sessions({ agent_id: agentId, page_size: 50 });
+      const adapted = adaptSessionList(res.data);
+      setSessions(adapted.sessions);
+    } catch (err) {
+      console.warn('載入 Session 列表失敗', err);
+      setSessions([]);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedAgent) {
+      fetchSessions(selectedAgent.id);
+    } else {
+      setSessions([]);
+    }
+  }, [selectedAgent, fetchSessions]);
 
   // 從 URL 參數載入（支援兩種情境）：
   // 1. ChatHistory 跳轉：?session=xxx&agent=xxx → 載入歷史訊息
@@ -147,6 +182,62 @@ const AgentChat = () => {
     [agents],
   );
 
+  // 選擇 Session（載入歷史訊息）
+  const handleSelectSession = useCallback(async (session) => {
+    if (!session) return;
+
+    // 如果正在串流，先中斷
+    if (abortRef.current) {
+      abortRef.current();
+      abortRef.current = null;
+    }
+
+    setSessionId(session.sessionId);
+    setIsStreaming(false);
+    setInputValue('');
+
+    // 載入歷史訊息
+    try {
+      const res = await chatAPI.sessionDetail(session.sessionId);
+      const detail = adaptSessionDetail(res.data);
+      if (detail?.messages?.length > 0) {
+        setMessages(
+          detail.messages.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+            time: msg.time || '',
+            isStreaming: false,
+          }))
+        );
+      } else {
+        setMessages([]);
+      }
+    } catch (err) {
+      console.warn('載入歷史訊息失敗', err);
+      setMessages([]);
+    }
+  }, []);
+
+  // 刪除 Session
+  const handleDeleteSession = useCallback(async (sid, e) => {
+    e?.stopPropagation();
+    try {
+      await chatAPI.deleteSession(sid);
+      antdMessage.success(t('agentChat.sessionDeleted'));
+      // 如果刪除的是當前 session，清空對話
+      if (sessionId === sid) {
+        setMessages([]);
+        setSessionId(null);
+      }
+      // 重新載入 session 列表
+      if (selectedAgent) {
+        fetchSessions(selectedAgent.id);
+      }
+    } catch {
+      antdMessage.error(t('agentChat.sessionDeleteFailed'));
+    }
+  }, [sessionId, selectedAgent, fetchSessions, t]);
+
   // 新對話
   const handleNewChat = useCallback(() => {
     if (abortRef.current) {
@@ -202,7 +293,6 @@ const AgentChat = () => {
       // onMessage
       (eventData) => {
         if (eventData.type === 'content') {
-          // 更新最後一條 assistant 訊息的 accumulated 內容
           setMessages((prev) => {
             const updated = [...prev];
             const lastIdx = updated.length - 1;
@@ -215,14 +305,12 @@ const AgentChat = () => {
             return updated;
           });
         } else if (eventData.type === 'complete') {
-          // 對話完成：更新 session_id 和 thread_id
           const newSessionId = eventData.session_id;
           const newThreadId = eventData.thread_id;
 
           if (newSessionId) {
             setSessionId(newSessionId);
           } else if (newThreadId) {
-            // 向後相容：舊版只回傳 thread_id
             setSessionId(newThreadId);
           }
 
@@ -245,13 +333,17 @@ const AgentChat = () => {
           });
           setIsStreaming(false);
           abortRef.current = null;
+
+          // 對話完成後重新載入 Session 列表
+          if (selectedAgent) {
+            fetchSessions(selectedAgent.id);
+          }
         }
       },
       // onComplete
       () => {
         setIsStreaming(false);
         abortRef.current = null;
-        // 確保最後一條訊息標記為非串流
         setMessages((prev) => {
           const updated = [...prev];
           const lastIdx = updated.length - 1;
@@ -275,7 +367,6 @@ const AgentChat = () => {
         setIsStreaming(false);
         abortRef.current = null;
 
-        // 移除空的 assistant 訊息，顯示錯誤
         setMessages((prev) => {
           const updated = [...prev];
           const lastIdx = updated.length - 1;
@@ -299,7 +390,7 @@ const AgentChat = () => {
     );
 
     abortRef.current = abort;
-  }, [inputValue, selectedAgent, isStreaming, sessionId, timeLocale, t]);
+  }, [inputValue, selectedAgent, isStreaming, sessionId, timeLocale, t, fetchSessions]);
 
   // Loading 狀態
   if (loading) {
@@ -320,6 +411,76 @@ const AgentChat = () => {
 
   return (
     <div className="agent-chat-page">
+      {/* 左側 Session 面板 */}
+      <div className="chat-session-panel">
+        <div className="session-panel-header">
+          <span className="session-panel-title">
+            <SelectOutlined style={{ marginRight: 6 }} />
+            {t('agentChat.chatSessions')}
+          </span>
+          {selectedAgent && (
+            <Button
+              icon={<PlusOutlined />}
+              onClick={handleNewChat}
+              disabled={isStreaming}
+              size="small"
+              type="text"
+              title={t('agentChat.newChat')}
+            />
+          )}
+        </div>
+        <div className="session-panel-list">
+          {!selectedAgent ? (
+            <div className="session-empty-hint">
+              {t('agentChat.selectAgentForSessions')}
+            </div>
+          ) : sessionsLoading ? (
+            <div className="session-loading">
+              <Spin size="small" />
+              <span style={{ marginLeft: 8 }}>{t('agentChat.loadingSessions')}</span>
+            </div>
+          ) : sessions.length === 0 ? (
+            <div className="session-empty-hint">
+              {t('agentChat.noSessions')}
+            </div>
+          ) : (
+            sessions.map((session) => (
+              <div
+                key={session.sessionId}
+                className={`session-panel-item ${sessionId === session.sessionId ? 'active' : ''}`}
+                onClick={() => handleSelectSession(session)}
+              >
+                <div className="session-item-content">
+                  <div className="session-item-title">
+                    <MessageOutlined style={{ marginRight: 6, fontSize: 12, opacity: 0.6 }} />
+                    {session.lastMessagePreview || session.title || t('agentChat.untitledSession')}
+                  </div>
+                  <div className="session-item-meta">
+                    <ClockCircleOutlined style={{ marginRight: 4, fontSize: 11 }} />
+                    <span>{session.formattedTime}</span>
+                    {session.messageCount > 0 && (
+                      <Tag color="blue" style={{ marginLeft: 6, fontSize: 10, lineHeight: '16px' }}>
+                        {session.messageCount} {t('agentChat.messagesUnit')}
+                      </Tag>
+                    )}
+                  </div>
+                </div>
+                <div className="session-item-actions" onClick={(e) => e.stopPropagation()}>
+                  <Popconfirm
+                    title={t('agentChat.confirmDeleteSession')}
+                    onConfirm={(e) => handleDeleteSession(session.sessionId, e)}
+                    okText={t('common.confirm')}
+                    cancelText={t('common.cancel')}
+                  >
+                    <DeleteOutlined className="session-delete-btn" />
+                  </Popconfirm>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
       {/* 主聊天區 */}
       <div className="chat-main">
         <div className="chat-header">
@@ -436,7 +597,7 @@ const AgentChat = () => {
         </div>
       </div>
 
-      {/* 右側 Agent 列表 */}
+      {/* 右側 Agent 列表（恢復原本樣式） */}
       <div className="chat-agent-panel">
         <div className="agent-panel-header">
           <span className="agent-panel-title">

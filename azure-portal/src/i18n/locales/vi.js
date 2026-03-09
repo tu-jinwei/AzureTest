@@ -124,6 +124,19 @@ const vi = {
     stop: 'Dừng',
     waitingReply: 'AI đang trả lời, vui lòng đợi...',
     errorReply: 'AI trả lời thất bại, vui lòng thử lại sau',
+    // Liên quan đến phiên
+    chatSessions: 'Chọn cuộc trò chuyện',
+    selectAgentForSessions: 'Chọn Agent để xem lịch sử trò chuyện',
+    loadingSessions: 'Đang tải...',
+    noSessions: 'Không có lịch sử trò chuyện',
+    untitledSession: 'Cuộc trò chuyện chưa đặt tên',
+    messagesUnit: 'tin nhắn',
+    confirmDeleteSession: 'Bạn có chắc chắn muốn xóa cuộc trò chuyện này không?',
+    sessionDeleted: 'Đã xóa cuộc trò chuyện',
+    sessionDeleteFailed: 'Xóa thất bại',
+    // Modal tất cả Agent
+    viewAllAgents: 'Xem tất cả Agent ({count})',
+    allAgentsTitle: 'Tất cả AI Agent',
   },
 
   // ===== Lịch sử trò chuyện =====
@@ -131,6 +144,7 @@ const vi = {
     title: 'Lịch sử trò chuyện',
     searchPlaceholder: 'Tìm kiếm cuộc trò chuyện...',
     filterAgent: 'Lọc Agent',
+    allAgents: 'Tất cả Agent',
     noRecords: 'Không tìm thấy bản ghi cuộc trò chuyện',
     loadingHistory: 'Đang tải lịch sử trò chuyện...',
     continueChat: 'Tiếp tục trò chuyện',

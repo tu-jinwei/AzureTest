@@ -506,8 +506,9 @@ const Library = () => {
         onCancel={handleClosePreviewModal}
         footer={null}
         width="90vw"
-        style={{ top: 20, paddingBottom: 20 }}
-        styles={{ body: { padding: 0, height: 'calc(100vh - 40px - 55px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
+        centered
+        style={{ maxHeight: 'calc(100vh - 40px)', paddingBottom: 0 }}
+        styles={{ body: { padding: 0, height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
         wrapClassName="no-scroll-modal"
       >
         {/* 多 PDF 檔案切換 */}

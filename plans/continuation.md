@@ -491,6 +491,26 @@ services/storage_service.py      # 本地檔案儲存服務（uploads/ 目錄管
   - 公告欄底部「還有 N 條公告」改為「查看所有公告」連結，移除右上角重複的「查看所有公告」按鈕
   - 影響檔案：`Home.jsx`, `Home.css`, `Library.css`
 
+7. **對話歷史頁面小螢幕水平溢出**
+   - **問題**：ChatHistory 頁面在小螢幕下，Session 卡片長文字超出容器寬度，頁面出現水平捲軸，搜尋框被截斷
+   - **根因**：flex 容器鏈中缺少 `min-width: 0`，導致 `text-overflow: ellipsis` 無法生效，內容撐開父容器
+   - **修復**：
+     - `Layout.css` 的 `.layout-content` 加入 `min-width: 0` + `overflow-x: hidden`
+     - `ChatHistory.css` 的 `.chat-history-page` 加入 `min-width: 0` + `overflow: hidden`
+     - `ChatHistory.css` 的 `.history-item` 加入 `min-width: 0`
+     - 新增 `@media (max-width: 768px)` 響應式規則：filters 換行、item 間距縮小、actions 常駐顯示
+   - 影響檔案：`Layout.css`, `ChatHistory.css`
+
+8. **PDF 預覽 Modal 小螢幕外層滾動**
+   - **問題**：PDF 預覽 Modal 在小螢幕下出現外層捲軸（`.ant-modal-wrap` 的 scrollbar），Modal 高度超出 viewport
+   - **根因**：
+     - CSS 選擇器錯誤：`.no-scroll-modal .ant-modal-wrap`（子代選擇器）應為 `.no-scroll-modal.ant-modal-wrap`（複合選擇器），因為 `wrapClassName` 是加在 `.ant-modal-wrap` 本身
+     - Modal `style={{ top: 20, paddingBottom: 20 }}` + body `height: calc(100vh - 40px - 55px)` 總高度超出 viewport
+   - **修復**：
+     - `Library.css` + `Home.css`：選擇器改為 `.no-scroll-modal.ant-modal-wrap`（去掉空格）+ `!important`
+     - `Library.jsx` + `Home.jsx`：Modal 改用 `centered` + `maxHeight: calc(100vh - 40px)` + body `height: calc(100vh - 120px)`
+   - 影響檔案：`Library.css`, `Home.css`, `Library.jsx`, `Home.jsx`
+
 ### 🔲 已知問題 / Bug
 - Vite build 產出 > 500KB 的 chunk（建議做 code splitting）
 - ~~**圖書館館名消失問題**~~ → 已在 Phase 4.8 解決（館名改為獨立的 `local_library_catalog` 表）
@@ -499,6 +519,7 @@ services/storage_service.py      # 本地檔案儲存服務（uploads/ 目錄管
 ## 11. Git 歷史
 
 ```
+(pending) fix: 對話歷史頁面小螢幕水平溢出修復 — Layout/ChatHistory CSS min-width + 響應式
 (pending) feat: Phase 4.8 圖書館館名獨立表 — local_library_catalog + catalog API
 (pending) fix: 5 個已知 Bug 修復（ACL 儲存、Agent 卡片、圖書館卡片、PDF Modal、公告欄）
 (pending) feat: Agatha AI 串接 + Portal MongoDB 對話歷史 + Session API

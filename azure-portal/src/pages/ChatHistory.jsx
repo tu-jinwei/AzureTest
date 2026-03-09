@@ -132,7 +132,7 @@ const ChatHistory = () => {
 
   // Agent 篩選切換時重置頁碼
   const handleAgentFilter = (value) => {
-    setFilterAgent(value);
+    setFilterAgent(value || null);  // 空字串或 undefined（allowClear）都視為「全部」
     setPage(1);
   };
 
@@ -165,8 +165,10 @@ const ChatHistory = () => {
             style={{ width: 200 }}
             value={filterAgent}
             onChange={handleAgentFilter}
-            allowClear
-            options={agents.map((a) => ({ value: a.id, label: a.name }))}
+            options={[
+              { value: '', label: t('chatHistoryPage.allAgents') || '全部 Agent' },
+              ...agents.map((a) => ({ value: a.id, label: a.name })),
+            ]}
           />
         </div>
       </div>

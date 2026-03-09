@@ -124,6 +124,19 @@ const en = {
     stop: 'Stop',
     waitingReply: 'AI is replying, please wait...',
     errorReply: 'AI reply failed, please try again later',
+    // Session related
+    chatSessions: 'Select Chat',
+    selectAgentForSessions: 'Select an Agent to view chat history',
+    loadingSessions: 'Loading...',
+    noSessions: 'No chat history',
+    untitledSession: 'Untitled conversation',
+    messagesUnit: 'msgs',
+    confirmDeleteSession: 'Are you sure you want to delete this conversation?',
+    sessionDeleted: 'Conversation deleted',
+    sessionDeleteFailed: 'Failed to delete',
+    // All agents modal
+    viewAllAgents: 'View All Agents ({count})',
+    allAgentsTitle: 'All AI Agents',
   },
 
   // ===== Chat History =====
@@ -131,6 +144,7 @@ const en = {
     title: 'Chat History',
     searchPlaceholder: 'Search conversations...',
     filterAgent: 'Filter Agent',
+    allAgents: 'All Agents',
     noRecords: 'No conversation records found',
     loadingHistory: 'Loading chat history...',
     continueChat: 'Continue Chat',

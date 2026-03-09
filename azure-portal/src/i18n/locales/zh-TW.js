@@ -124,6 +124,19 @@ const zhTW = {
     stop: '停止',
     waitingReply: 'AI 回覆中，請稍候...',
     errorReply: 'AI 回覆失敗，請稍後再試',
+    // Session 相關
+    chatSessions: '選擇對話',
+    selectAgentForSessions: '請先選擇 Agent 以查看歷史對話',
+    loadingSessions: '載入中...',
+    noSessions: '尚無歷史對話',
+    untitledSession: '未命名對話',
+    messagesUnit: '條',
+    confirmDeleteSession: '確定要刪除這個對話嗎？',
+    sessionDeleted: '對話已刪除',
+    sessionDeleteFailed: '刪除失敗',
+    // Agent 全部列表
+    viewAllAgents: '查看全部 Agent（共 {count} 個）',
+    allAgentsTitle: '全部 AI 代理',
   },
 
   // ===== 對話歷史 =====
@@ -131,6 +144,7 @@ const zhTW = {
     title: '對話歷史',
     searchPlaceholder: '搜尋對話...',
     filterAgent: '篩選 Agent',
+    allAgents: '全部 Agent',
     noRecords: '沒有找到對話記錄',
     loadingHistory: '載入對話歷史中...',
     continueChat: '繼續對話',

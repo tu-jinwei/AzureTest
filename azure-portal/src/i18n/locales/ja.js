@@ -124,6 +124,19 @@ const ja = {
     stop: '停止',
     waitingReply: 'AI が返信中です。お待ちください...',
     errorReply: 'AI の返信に失敗しました。後でもう一度お試しください',
+    // セッション関連
+    chatSessions: 'チャットを選択',
+    selectAgentForSessions: 'Agent を選択してチャット履歴を表示',
+    loadingSessions: '読み込み中...',
+    noSessions: 'チャット履歴はありません',
+    untitledSession: '無題の会話',
+    messagesUnit: '件',
+    confirmDeleteSession: 'このチャットを削除してもよろしいですか？',
+    sessionDeleted: 'チャットが削除されました',
+    sessionDeleteFailed: '削除に失敗しました',
+    // 全エージェントモーダル
+    viewAllAgents: 'すべてのAgent を表示（{count} 件）',
+    allAgentsTitle: 'すべての AI エージェント',
   },
 
   // ===== チャット履歴 =====
@@ -131,6 +144,7 @@ const ja = {
     title: 'チャット履歴',
     searchPlaceholder: 'チャットを検索...',
     filterAgent: 'Agent フィルター',
+    allAgents: 'すべての Agent',
     noRecords: 'チャット記録が見つかりません',
     loadingHistory: 'チャット履歴を読み込み中...',
     continueChat: 'チャットを続ける',

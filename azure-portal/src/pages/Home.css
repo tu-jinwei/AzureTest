@@ -301,8 +301,8 @@
 }
 
 /* === 防止 Modal 外層滾動 === */
-.no-scroll-modal .ant-modal-wrap {
-  overflow: hidden;
+.no-scroll-modal.ant-modal-wrap {
+  overflow: hidden !important;
 }
 
 /* ===== Agent Store 預覽 ===== */

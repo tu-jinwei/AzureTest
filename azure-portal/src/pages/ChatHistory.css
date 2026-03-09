@@ -2,6 +2,8 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .history-header {
@@ -41,6 +43,7 @@
   box-shadow: var(--card-shadow);
   cursor: pointer;
   transition: all 0.2s;
+  min-width: 0;
 }
 
 .history-item:hover {
@@ -219,4 +222,32 @@
 .history-modal-continue-btn.ant-btn:active {
   transform: translateY(0);
   box-shadow: 0 2px 8px rgba(42, 171, 179, 0.3);
+}
+
+/* ===== 小螢幕響應式 ===== */
+@media (max-width: 768px) {
+  .history-filters {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .history-filters .ant-input-affix-wrapper,
+  .history-filters .ant-select {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .history-item {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .history-item-meta {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .history-item-actions {
+    opacity: 1;
+  }
 }
