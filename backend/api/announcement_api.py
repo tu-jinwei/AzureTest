@@ -23,6 +23,7 @@ from models.schemas import (
     MessageResponse,
 )
 from services.storage_service import storage_service
+from services.pii_service import get_pii_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -230,6 +231,51 @@ async def upload_announcement_file(
     if not new_files:
         raise HTTPException(status_code=400, detail="未收到任何檔案")
 
+    # PII 掃描新上傳的附件
+    pii_warning = ""
+    try:
+        pii_svc = get_pii_service()
+        if pii_svc.enabled and new_files:
+            for fi in new_files:
+                file_path = storage_service.get_file_path(
+                    target_country, "announcements", notice_id, fi["name"]
+                )
+                if file_path:
+                    scan_result = await pii_svc.scan_file(file_path)
+                    fi["pii_detected"] = scan_result.has_pii
+                    fi["pii_entity_count"] = scan_result.entity_count
+                    fi["pii_entity_types"] = scan_result.entity_types
+                    if scan_result.has_pii:
+                        logger.warning(
+                            f"⚠️ PII 偵測: 公告附件 {notice_id}/{fi['name']} "
+                            f"含 {scan_result.entity_count} 個 PII 實體 "
+                            f"({', '.join(scan_result.entity_types)})"
+                        )
+            pii_files = [f for f in new_files if f.get("pii_detected")]
+            if pii_files:
+                if settings.PII_BLOCK_UPLOAD:
+                    # 阻擋模式：刪除本次新上傳的檔案（不影響已有附件）
+                    for fi in new_files:
+                        storage_service.delete_single_file(
+                            target_country, "announcements", notice_id, fi["name"]
+                        )
+                    blocked_details = []
+                    for pf in pii_files:
+                        types_str = ", ".join(pf.get("pii_entity_types", []))
+                        blocked_details.append(
+                            f"「{pf['name']}」含 {pf.get('pii_entity_count', 0)} 個 PII（{types_str}）"
+                        )
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"上傳被拒絕：偵測到個人敏感資訊（PII）。{'; '.join(blocked_details)}。請移除敏感資訊後重新上傳。",
+                    )
+                else:
+                    pii_warning = f"⚠️ {len(pii_files)} 個檔案偵測到個人敏感資訊（PII）"
+    except HTTPException:
+        raise  # 重新拋出 PII 阻擋的 HTTPException
+    except Exception as e:
+        logger.warning(f"⚠️ PII 掃描失敗（不影響上傳）: {e}")
+
     # 更新公告的 files JSONB（追加）
     current_files.extend(new_files)
     session = await data_router.get_local_pg(target_country)
@@ -244,8 +290,11 @@ async def upload_announcement_file(
         await session.close()
 
     uploaded_names = [f["name"] for f in new_files]
+    msg = f"已上傳 {len(new_files)} 個附件"
+    if pii_warning:
+        msg += f"。{pii_warning}"
     return MessageResponse(
-        message=f"已上傳 {len(new_files)} 個附件",
+        message=msg,
         detail=", ".join(uploaded_names),
     )
 

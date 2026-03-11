@@ -267,6 +267,36 @@ export const libraryAPI = {
       },
     }),
 
+  /** 上傳館封面圖片
+   * @param {string} catalogId - 館 ID
+   * @param {FormData} formData - 包含 file 的 FormData
+   * @param {string} [country] - 國家代碼（僅 super_admin 可跨國）
+   */
+  uploadCatalogImage: (catalogId, formData, country) =>
+    api.post(`/library/catalogs/${catalogId}/image`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params: country ? { country } : {},
+    }),
+
+  /** 取得館封面圖片（回傳 blob）
+   * @param {string} catalogId - 館 ID
+   * @param {string} [country] - 國家代碼（僅 super_admin 可跨國）
+   */
+  getCatalogImage: (catalogId, country) =>
+    api.get(`/library/catalogs/${catalogId}/image`, {
+      responseType: 'blob',
+      params: country ? { country } : {},
+    }),
+
+  /** 刪除館封面圖片
+   * @param {string} catalogId - 館 ID
+   * @param {string} [country] - 國家代碼（僅 super_admin 可跨國）
+   */
+  deleteCatalogImage: (catalogId, country) =>
+    api.delete(`/library/catalogs/${catalogId}/image`, {
+      params: country ? { country } : {},
+    }),
+
   /** 刪除整個館（僅限空館，同時刪除 catalog 記錄）
    * @param {string} libraryName - 館名
    * @param {string} [country] - 國家代碼（僅 super_admin 可跨國）
@@ -337,6 +367,12 @@ export const chatAPI = {
     (async () => {
       try {
         const token = getToken();
+        // 過濾掉 undefined/null 的欄位（如 images 為空時不傳）
+        const payload = { ...data };
+        if (!payload.images || payload.images.length === 0) {
+          delete payload.images;
+        }
+
         const response = await fetch(`${BASE_PREFIX}/api/chat/stream`, {
           method: 'POST',
           headers: {
@@ -344,7 +380,7 @@ export const chatAPI = {
             Accept: 'text/event-stream',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify(data),
+          body: JSON.stringify(payload),
           signal: controller.signal,
         });
 

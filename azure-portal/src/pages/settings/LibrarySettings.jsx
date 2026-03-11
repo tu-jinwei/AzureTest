@@ -15,6 +15,7 @@ import {
   Divider,
   Card,
   Tooltip,
+  Image,
 } from 'antd';
 import {
   PlusOutlined,
@@ -28,6 +29,8 @@ import {
   EditOutlined,
   PaperClipOutlined,
   CloudUploadOutlined,
+  PictureOutlined,
+  InboxOutlined,
 } from '@ant-design/icons';
 import { libraryAPI } from '../../services/api';
 import { adaptLibraryDocs, adaptCatalogs } from '../../utils/adapters';
@@ -61,6 +64,13 @@ const LibrarySettings = () => {
   const [editLoading, setEditLoading] = useState(false);
   const [editForm] = Form.useForm();
   const [editFileList, setEditFileList] = useState([]); // 追加上傳的檔案列表
+
+  // 圖片上傳 Modal
+  const [imageModal, setImageModal] = useState(null); // 當前要上傳圖片的 catalog
+  const [imageFileList, setImageFileList] = useState([]);
+  const [imagePreview, setImagePreview] = useState(null); // 預覽 URL (base64)
+  const [imageUploading, setImageUploading] = useState(false);
+  const [existingImageUrl, setExistingImageUrl] = useState(null); // 已有圖片的 blob URL
 
   // 從後端載入圖書館資料（列表頁面用）— 同時載入 catalogs + 文件
   const fetchLibrary = async (country) => {
@@ -333,9 +343,72 @@ const LibrarySettings = () => {
     }
   };
 
+  // ===== 圖片上傳 =====
+  const handleOpenImageModal = async (cat) => {
+    setImageModal(cat);
+    setImageFileList([]);
+    setImagePreview(null);
+    setExistingImageUrl(null);
+
+    // 如果已有圖片，載入預覽
+    if (cat.imageUrl) {
+      try {
+        const countryParam = isSuperAdmin ? effectiveCountry : undefined;
+        const res = await libraryAPI.getCatalogImage(cat.catalogId, countryParam);
+        const url = URL.createObjectURL(res.data);
+        setExistingImageUrl(url);
+      } catch {
+        // 圖片載入失敗，忽略
+      }
+    }
+  };
+
+  const handleCloseImageModal = () => {
+    setImageModal(null);
+    setImageFileList([]);
+    setImagePreview(null);
+    if (existingImageUrl) {
+      URL.revokeObjectURL(existingImageUrl);
+      setExistingImageUrl(null);
+    }
+  };
+
+  const handleUploadImage = async () => {
+    if (!imageModal || imageFileList.length === 0) return;
+    setImageUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', imageFileList[0].originFileObj);
+      const countryParam = isSuperAdmin ? effectiveCountry : undefined;
+      await libraryAPI.uploadCatalogImage(imageModal.catalogId, formData, countryParam);
+      message.success(t('librarySettings.coverImageUploaded'));
+      handleCloseImageModal();
+      fetchLibrary(effectiveCountry);
+    } catch (err) {
+      message.error(t('librarySettings.coverImageUploadFailed') + '：' + (err.response?.data?.detail || err.message));
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  const handleDeleteImage = async () => {
+    if (!imageModal) return;
+    try {
+      const countryParam = isSuperAdmin ? effectiveCountry : undefined;
+      await libraryAPI.deleteCatalogImage(imageModal.catalogId, countryParam);
+      message.success(t('librarySettings.coverImageDeleted'));
+      handleCloseImageModal();
+      fetchLibrary(effectiveCountry);
+    } catch (err) {
+      message.error(t('librarySettings.coverImageDeleteFailed') + '：' + (err.response?.data?.detail || err.message));
+    }
+  };
+
   // 館名管理統計（從 catalogs 取得，確保空館也出現）
   const libraryStats = catalogs.map((cat) => ({
+    catalogId: cat.catalogId,
     name: cat.name,
+    imageUrl: cat.imageUrl || null,
     docCount: cat.docCount ?? 0,
   }));
 
@@ -467,6 +540,22 @@ const LibrarySettings = () => {
                     <Tag color={count > 0 ? 'blue' : 'default'}>
                       {t('librarySettings.documentCount', { count })}
                     </Tag>
+                  ),
+                },
+                {
+                  title: t('librarySettings.coverImage'),
+                  key: 'image',
+                  width: 120,
+                  render: (_, record) => (
+                    <Button
+                      type="text"
+                      icon={<PictureOutlined />}
+                      onClick={() => handleOpenImageModal(record)}
+                      style={{ color: record.imageUrl ? 'var(--primary-color)' : '#999' }}
+                      size="small"
+                    >
+                      {record.imageUrl ? t('librarySettings.changeImage') : t('librarySettings.uploadImage')}
+                    </Button>
                   ),
                 },
                 {
@@ -748,6 +837,123 @@ const LibrarySettings = () => {
             label: `${u.name} (${t(`departments.${u.department}`) || u.department})`,
           }))}
         />
+      </Modal>
+
+      {/* 封面圖片上傳 Modal */}
+      <Modal
+        title={
+          <span>
+            <PictureOutlined style={{ marginRight: 8 }} />
+            {t('librarySettings.coverImageTitle', { name: imageModal?.name })}
+          </span>
+        }
+        open={!!imageModal}
+        onCancel={handleCloseImageModal}
+        footer={[
+          imageModal?.imageUrl && (
+            <Popconfirm
+              key="delete"
+              title={t('librarySettings.deleteCoverImageConfirm')}
+              onConfirm={handleDeleteImage}
+              okText={t('common.confirm')}
+              cancelText={t('common.cancel')}
+              okButtonProps={{ danger: true }}
+            >
+              <Button danger icon={<DeleteOutlined />}>
+                {t('librarySettings.deleteImage')}
+              </Button>
+            </Popconfirm>
+          ),
+          <Button key="cancel" onClick={handleCloseImageModal}>
+            {t('common.cancel')}
+          </Button>,
+          <Button
+            key="upload"
+            type="primary"
+            onClick={handleUploadImage}
+            loading={imageUploading}
+            disabled={imageFileList.length === 0}
+            style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
+          >
+            {t('common.upload')}
+          </Button>,
+        ]}
+        width={520}
+      >
+        <p style={{ marginBottom: 12, color: '#666' }}>
+          {t('librarySettings.coverImageHint')}
+        </p>
+
+        {/* 已有圖片預覽 */}
+        {existingImageUrl && !imagePreview && (
+          <div style={{ marginBottom: 16, textAlign: 'center' }}>
+            <p style={{ marginBottom: 8, fontWeight: 500, color: '#333' }}>
+              {t('librarySettings.currentCoverImage')}
+            </p>
+            <img
+              src={existingImageUrl}
+              alt="current cover"
+              style={{
+                maxWidth: '100%',
+                maxHeight: 200,
+                borderRadius: 8,
+                border: '1px solid #d9d9d9',
+                objectFit: 'contain',
+              }}
+            />
+          </div>
+        )}
+
+        <Upload.Dragger
+          accept=".png,.jpg,.jpeg"
+          maxCount={1}
+          fileList={imageFileList}
+          beforeUpload={(file) => {
+            // 檢查檔案大小
+            if (file.size > 5 * 1024 * 1024) {
+              message.error(t('librarySettings.imageSizeExceeded'));
+              return Upload.LIST_IGNORE;
+            }
+            // 產生預覽
+            const reader = new FileReader();
+            reader.onload = (e) => setImagePreview(e.target.result);
+            reader.readAsDataURL(file);
+            return false; // 阻止自動上傳
+          }}
+          onChange={({ fileList }) => {
+            setImageFileList(fileList.slice(-1)); // 只保留最後一個
+            if (fileList.length === 0) setImagePreview(null);
+          }}
+          onRemove={() => {
+            setImagePreview(null);
+          }}
+        >
+          <p className="ant-upload-drag-icon">
+            <InboxOutlined />
+          </p>
+          <p className="ant-upload-text">{t('librarySettings.dragImageHint')}</p>
+          <p className="ant-upload-hint">{t('librarySettings.imageFormatHint')}</p>
+        </Upload.Dragger>
+
+        {/* 新圖片預覽 */}
+        {imagePreview && (
+          <div style={{ marginTop: 16, textAlign: 'center' }}>
+            <p style={{ marginBottom: 8, fontWeight: 500, color: '#333' }}>
+              {t('librarySettings.imagePreview')}
+            </p>
+            <img
+              src={imagePreview}
+              alt="preview"
+              style={{
+                maxWidth: '100%',
+                maxHeight: 200,
+                borderRadius: 8,
+                border: '1px solid #d9d9d9',
+                objectFit: 'contain',
+              }}
+            />
+          </div>
+        )}
       </Modal>
     </div>
   );

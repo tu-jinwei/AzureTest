@@ -9,6 +9,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Home from './pages/Home';
+import AgentStore from './pages/AgentStore';
 import AgentChat from './pages/AgentChat';
 import ChatHistory from './pages/ChatHistory';
 import Library from './pages/Library';
@@ -37,6 +38,7 @@ const App = () => {
                   <Route element={<ProtectedRoute />}>
                     <Route path="/" element={<Layout />}>
                       <Route index element={<Home />} />
+                      <Route path="agent-store" element={<AgentStore />} />
                       <Route path="agent-store/chat" element={<AgentChat />} />
                       <Route path="agent-store/history" element={<ChatHistory />} />
                       <Route path="library" element={<Library />} />

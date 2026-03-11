@@ -163,6 +163,7 @@ export function adaptCatalog(apiData) {
     catalogId: apiData.catalog_id,
     name: apiData.library_name ?? '',
     description: apiData.description ?? '',
+    imageUrl: apiData.image_url ?? null,
     docCount: apiData.doc_count ?? 0,
     createdAt: apiData.created_at ?? null,
   };
@@ -237,6 +238,7 @@ export function adaptLibraryDocs(apiDataList, catalogs) {
         groupMap.set(catName, {
           id: cat.catalogId || `cat-${idx + 1}`,
           name: catName,
+          imageUrl: cat.imageUrl || null,
           documents: [],
         });
       }

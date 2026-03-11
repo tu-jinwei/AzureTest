@@ -137,6 +137,25 @@ const en = {
     // All agents modal
     viewAllAgents: 'View All Agents ({count})',
     allAgentsTitle: 'All AI Agents',
+    // Image upload
+    uploadImage: 'Upload Image',
+    imageMessage: '[Image]',
+    maxImagesWarning: 'You can upload up to {max} images',
+    notImageFile: '{name} is not an image file',
+    imageTooLarge: '{name} exceeds the 10MB size limit',
+    imageReadFailed: 'Failed to read {name}',
+  },
+
+  // ===== Agent Store =====
+  agentStore: {
+    title: 'Agent Store',
+    loading: 'Loading agents...',
+    searchPlaceholder: 'Search agents...',
+    totalAgents: '{count} agents',
+    noAgents: 'No agents available',
+    noResults: 'No agents match your search',
+    noDescription: 'No description',
+    startChat: 'Start Chat',
   },
 
   // ===== Chat History =====
@@ -296,6 +315,23 @@ const en = {
     fileSizeExceeded: 'Total file size {size} MB exceeds 100 MB limit',
     fileUploaded: 'Uploaded',
     fileNotUploaded: 'Not Uploaded',
+    // Cover Image
+    coverImage: 'Cover Image',
+    uploadImage: 'Upload',
+    changeImage: 'Change',
+    deleteImage: 'Delete Image',
+    coverImageTitle: 'Cover Image - {name}',
+    coverImageHint: 'Upload a cover image for this library (PNG or JPG, max 5MB)',
+    coverImageUploaded: 'Cover image uploaded',
+    coverImageUploadFailed: 'Failed to upload cover image',
+    coverImageDeleted: 'Cover image deleted',
+    coverImageDeleteFailed: 'Failed to delete cover image',
+    deleteCoverImageConfirm: 'Are you sure you want to delete this cover image?',
+    currentCoverImage: 'Current cover image:',
+    imagePreview: 'Preview:',
+    dragImageHint: 'Click or drag image to this area',
+    imageFormatHint: 'Only PNG and JPG formats, max 5MB',
+    imageSizeExceeded: 'Image size exceeds 5MB limit',
   },
 
   // ===== User Management =====

@@ -100,11 +100,21 @@
   padding: 8px 0;
 }
 
+.announcement-modal-date {
+  font-size: 13px;
+  color: var(--text-light);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+}
+
 .announcement-modal-text {
   font-size: 14px;
   line-height: 1.8;
   color: var(--text-secondary);
   margin-bottom: 20px;
+  min-height: 300px;
+  white-space: pre-wrap;
 }
 
 .announcement-modal-attachment {

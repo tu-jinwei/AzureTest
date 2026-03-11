@@ -137,6 +137,25 @@ const zhTW = {
     // Agent 全部列表
     viewAllAgents: '查看全部 Agent（共 {count} 個）',
     allAgentsTitle: '全部 AI 代理',
+    // 圖片上傳
+    uploadImage: '上傳圖片',
+    imageMessage: '[圖片]',
+    maxImagesWarning: '最多只能上傳 {max} 張圖片',
+    notImageFile: '{name} 不是圖片檔案',
+    imageTooLarge: '{name} 超過 10MB 大小限制',
+    imageReadFailed: '{name} 讀取失敗',
+  },
+
+  // ===== Agent Store =====
+  agentStore: {
+    title: 'Agent Store',
+    loading: '載入 Agent 列表中...',
+    searchPlaceholder: '搜尋 Agent...',
+    totalAgents: '共 {count} 個 Agent',
+    noAgents: '目前沒有可用的 Agent',
+    noResults: '沒有符合搜尋條件的 Agent',
+    noDescription: '暫無描述',
+    startChat: '開始對話',
   },
 
   // ===== 對話歷史 =====
@@ -296,6 +315,23 @@ const zhTW = {
     fileSizeExceeded: '所有檔案總計 {size} MB，超過 100 MB 上限',
     fileUploaded: '已上傳',
     fileNotUploaded: '未上傳',
+    // 封面圖片
+    coverImage: '封面圖片',
+    uploadImage: '上傳',
+    changeImage: '更換',
+    deleteImage: '刪除圖片',
+    coverImageTitle: '封面圖片 - {name}',
+    coverImageHint: '為此館上傳封面圖片（支援 PNG、JPG，最大 5MB）',
+    coverImageUploaded: '封面圖片已上傳',
+    coverImageUploadFailed: '封面圖片上傳失敗',
+    coverImageDeleted: '封面圖片已刪除',
+    coverImageDeleteFailed: '刪除封面圖片失敗',
+    deleteCoverImageConfirm: '確定要刪除此館的封面圖片嗎？',
+    currentCoverImage: '目前封面圖片：',
+    imagePreview: '預覽：',
+    dragImageHint: '點擊或拖曳圖片到此區域',
+    imageFormatHint: '僅支援 PNG、JPG 格式，最大 5MB',
+    imageSizeExceeded: '圖片大小超過 5MB 上限',
   },
 
   // ===== 使用者管理 =====

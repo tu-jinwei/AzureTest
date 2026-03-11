@@ -267,7 +267,16 @@ const ChatHistory = () => {
               ]
             : null
         }
-        width={600}
+        width={800}
+        centered
+        className="history-detail-modal-fullsize"
+        styles={{
+          body: {
+            height: 'calc(100vh - 240px)',
+            overflow: 'auto',
+            padding: '16px 24px',
+          },
+        }}
       >
         {detailLoading ? (
           <div style={{ textAlign: 'center', padding: 40 }}>

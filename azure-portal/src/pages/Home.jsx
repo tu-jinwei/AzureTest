@@ -18,6 +18,7 @@ import {
   FileOutlined,
   HistoryOutlined,
   SearchOutlined,
+  CalendarOutlined,
 } from '@ant-design/icons';
 import { announcementAPI, agentAPI, libraryAPI } from '../services/api';
 import { adaptAnnouncements, adaptAgents, adaptLibraryDocsFlat } from '../utils/adapters';
@@ -366,10 +367,15 @@ const Home = () => {
             {t('common.close')}
           </Button>,
         ]}
-        width={520}
+        width={640}
+        centered
       >
         {selectedAnnouncement && (
           <div className="announcement-modal-content">
+            <div className="announcement-modal-date">
+              <CalendarOutlined style={{ marginRight: 6 }} />
+              {selectedAnnouncement.date}
+            </div>
             <p className="announcement-modal-text">
               {selectedAnnouncement.content}
             </p>
@@ -519,6 +525,7 @@ const Home = () => {
           </Button>,
         ]}
         width={480}
+        centered
       >
         <List
           dataSource={selectedAnnouncement?.attachments || []}

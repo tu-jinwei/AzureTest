@@ -108,6 +108,25 @@ class Settings:
     PORTAL_MONGO_URI: str = os.getenv("PORTAL_MONGO_URI", "")
     PORTAL_MONGO_DB: str = os.getenv("PORTAL_MONGO_DB", "ctbc_portal")
 
+    # === PII Detection & Redaction ===
+    PII_ENABLED: bool = os.getenv("PII_ENABLED", "false").lower() in ("true", "1", "yes")
+    PII_CONFIDENCE_THRESHOLD: float = float(os.getenv("PII_CONFIDENCE_THRESHOLD", "0.5"))
+    PII_CHAT_AUTO_REDACT: bool = os.getenv("PII_CHAT_AUTO_REDACT", "true").lower() in ("true", "1", "yes")
+    PII_REDACT_MODE: str = os.getenv("PII_REDACT_MODE", "replace")  # replace, mask, hash
+    PII_BLOCK_UPLOAD: bool = os.getenv("PII_BLOCK_UPLOAD", "true").lower() in ("true", "1", "yes")  # 阻擋含 PII 的檔案上傳
+    PII_BLOCK_CHAT: bool = os.getenv("PII_BLOCK_CHAT", "true").lower() in ("true", "1", "yes")  # 阻擋含 PII 的聊天訊息
+
+    @property
+    def PII_LANGUAGES(self) -> list:
+        raw = os.getenv("PII_LANGUAGES", "en,zh")
+        return [lang.strip() for lang in raw.split(",") if lang.strip()]
+
+    @property
+    def PII_EXCLUDED_ENTITIES(self) -> list:
+        """不需要偵測/阻擋的 PII entity type（逗號分隔）"""
+        raw = os.getenv("PII_EXCLUDED_ENTITIES", "DATE_TIME,LOCATION,URL,NRP")
+        return [e.strip() for e in raw.split(",") if e.strip()]
+
     # === CORS ===
     @property
     def CORS_ORIGINS(self) -> List[str]:

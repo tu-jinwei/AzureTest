@@ -130,6 +130,7 @@ class LibraryCatalogResponse(BaseModel):
     catalog_id: str
     library_name: str
     description: Optional[str] = None
+    image_url: Optional[str] = None
     doc_count: int = 0
     created_at: Optional[datetime] = None
 
@@ -179,6 +180,7 @@ class ChatStreamCreate(BaseModel):
     agent_id: str
     message: str
     session_id: Optional[str] = None  # null=新對話, "sess-xxx"=延續對話
+    images: Optional[List[str]] = None  # 圖片陣列（base64 data URI 或 HTTP URL）
 
 
 class ChatResponse(BaseModel):

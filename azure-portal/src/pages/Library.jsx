@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Modal, Button, Pagination, Empty, Spin, message, Tag, List } from 'antd';
 import {
@@ -15,6 +15,7 @@ import {
   CloseCircleOutlined,
   FileOutlined,
   LoadingOutlined,
+  PictureOutlined,
 } from '@ant-design/icons';
 import { libraryAPI } from '../services/api';
 import { adaptLibraryDocs, adaptCatalogs } from '../utils/adapters';
@@ -58,7 +59,57 @@ const getFileIcon = (filename) => {
   }
 };
 
-const DOCS_PER_PAGE = 6;
+const DOCS_PER_PAGE = 5;
+
+/** 館封面圖片元件（需要 auth 的圖片載入） */
+const LibraryCoverImage = memo(({ catalogId, country }) => {
+  const [src, setSrc] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let url = null;
+    let cancelled = false;
+    setLoading(true);
+
+    libraryAPI.getCatalogImage(catalogId, country)
+      .then((res) => {
+        if (cancelled) return;
+        url = URL.createObjectURL(res.data);
+        setSrc(url);
+      })
+      .catch(() => {
+        if (!cancelled) setSrc(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [catalogId, country]);
+
+  if (loading) {
+    return (
+      <div className="library-card-image-placeholder">
+        <Spin size="small" />
+      </div>
+    );
+  }
+
+  if (!src) {
+    return (
+      <div className="library-card-image-placeholder">
+        <PictureOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />
+      </div>
+    );
+  }
+
+  return <img src={src} alt="library cover" />;
+});
+
+LibraryCoverImage.displayName = 'LibraryCoverImage';
 
 const Library = () => {
   const { effectiveCountry } = useCountry();
@@ -294,6 +345,20 @@ const Library = () => {
 
             return (
               <div key={lib.id} className="library-card">
+                {/* 卡片上半部 - 封面圖片 */}
+                <div
+                  className="library-card-image"
+                  onClick={() => setSelectedLibrary(lib)}
+                >
+                  {lib.imageUrl ? (
+                    <LibraryCoverImage catalogId={lib.id} country={effectiveCountry} />
+                  ) : (
+                    <div className="library-card-image-placeholder">
+                      <PictureOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />
+                    </div>
+                  )}
+                </div>
+                {/* 館名 header（換頁不動） */}
                 <div
                   className="library-card-header"
                   onClick={() => setSelectedLibrary(lib)}
@@ -397,13 +462,13 @@ const Library = () => {
             {t('common.close')}
           </Button>,
         ]}
-        width={560}
+        width={680}
+        centered
       >
         {selectedDoc && (
           <div className="pdf-preview-area">
             {/* 文件資訊 */}
             <div className="pdf-preview-info">
-              <p><strong>{t('libraryPage.fileName')}：</strong>{selectedDoc.name}</p>
               <p><strong>{t('libraryPage.description')}：</strong>{selectedDoc.description}</p>
               <p>
                 <strong>{t('libraryPage.fileStatus')}：</strong>
@@ -562,6 +627,7 @@ const Library = () => {
           </Button>,
         ]}
         width={480}
+        centered
       >
         <List
           dataSource={selectedDoc?.files || []}

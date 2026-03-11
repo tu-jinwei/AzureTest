@@ -144,7 +144,23 @@
   margin-top: 16px;
 }
 
-/* ===== Modal 對話詳情 ===== */
+/* ===== Modal 對話詳情（全尺寸） ===== */
+.history-detail-modal-fullsize .ant-modal {
+  max-width: 800px;
+}
+
+.history-detail-modal-fullsize .ant-modal-content {
+  height: calc(100vh - 100px);
+  display: flex;
+  flex-direction: column;
+}
+
+.history-detail-modal-fullsize .ant-modal-body {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
 .history-modal-messages {
   display: flex;
   flex-direction: column;

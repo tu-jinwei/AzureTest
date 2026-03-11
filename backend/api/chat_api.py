@@ -30,6 +30,7 @@ from config import settings
 from core.database import GlobalSessionLocal
 from core.portal_mongo import get_sessions_collection, get_messages_collection
 from core.security import get_current_user_payload
+from services.pii_service import get_pii_service
 from models.global_models import AgentMaster
 from models.schemas import (
     ChatCreate,
@@ -94,6 +95,7 @@ async def _save_to_portal(
     assistant_message: str,
     session_id: str | None = None,
     thread_id: str | None = None,
+    images: list | None = None,
 ) -> str:
     """
     將對話存入 Portal MongoDB（雙 Collection）
@@ -148,13 +150,21 @@ async def _save_to_portal(
         logger.info(f"✅ 對話已追加: session_id={session_id}")
 
     # 插入兩條訊息（assistant 時間戳 +1ms，確保排序正確）
+    user_msg_doc = {
+        "session_id": session_id,
+        "role": "user",
+        "content": user_message,
+        "created_at": now,
+    }
+    # 如果有圖片，記錄圖片數量（不存 base64 原始資料以節省空間）
+    if images:
+        user_msg_doc["metadata"] = {
+            "image_count": len(images),
+            "has_images": True,
+        }
+
     await messages_col.insert_many([
-        {
-            "session_id": session_id,
-            "role": "user",
-            "content": user_message,
-            "created_at": now,
-        },
+        user_msg_doc,
         {
             "session_id": session_id,
             "role": "assistant",
@@ -237,18 +247,89 @@ async def chat_stream(
             else:
                 existing_thread_id = None
 
+    # 提取圖片列表
+    images = body.images or []
+    if images:
+        logger.info(f"📸 收到 {len(images)} 張圖片")
+
     logger.info(
         f"🤖 Chat stream: user={email}, agent={body.agent_id}, "
         f"agatha={agatha_enabled}, session_id={body.session_id}, "
         f"thread_id={existing_thread_id}, "
+        f"images={len(images)}, "
         f"query={body.message[:50]}..."
     )
+
+    # PII 掃描與脫敏（送給 AI 的訊息）
+    original_message = body.message
+    redacted_message = body.message
+    pii_warning_data = None
+    pii_blocked = False  # PII 阻擋標記：不拋錯誤，改為正常回覆提示訊息
+    pii_block_message = ""
+    try:
+        pii_svc = get_pii_service()
+        if pii_svc.enabled:
+            pii_result = pii_svc.scan_text(body.message)
+            if pii_result.has_pii:
+                logger.warning(
+                    f"⚠️ PII 偵測: 聊天訊息含 {pii_result.entity_count} 個 PII 實體 "
+                    f"({', '.join(pii_result.entity_types)}), user={email}"
+                )
+                # 阻擋模式：以正常回覆方式提示使用者，不拋 HTTP 錯誤
+                if settings.PII_BLOCK_CHAT:
+                    types_str = ", ".join(pii_result.entity_types)
+                    pii_blocked = True
+                    pii_block_message = (
+                        f"⚠️ 偵測到您的訊息中包含 {pii_result.entity_count} 個個人敏感資訊"
+                        f"（{types_str}）。\n\n"
+                        f"為保護您的隱私安全，此訊息未被送出。請移除敏感資訊後重新發送。"
+                    )
+                else:
+                    pii_warning_data = {
+                        "has_pii": True,
+                        "entity_count": pii_result.entity_count,
+                        "entity_types": pii_result.entity_types,
+                    }
+                    # 如果啟用自動脫敏，替換送給 AI 的訊息
+                    if settings.PII_CHAT_AUTO_REDACT:
+                        redacted_message = pii_svc.anonymize_text(body.message)
+                        logger.info(f"🔒 聊天訊息已脫敏後送出 AI（原始長度={len(original_message)}, 脫敏長度={len(redacted_message)}）")
+    except Exception as e:
+        logger.warning(f"⚠️ 聊天 PII 掃描失敗（不影響發送）: {e}")
 
     async def stream_generator():
         """SSE 串流產生器"""
         full_content = ""
         final_thread_id = existing_thread_id
         final_session_id = body.session_id if (body.session_id and body.session_id.startswith("sess-")) else None
+
+        # 如果有 PII 警告，先發送警告事件
+        if pii_warning_data:
+            yield _sse_json({
+                "type": "pii_warning",
+                **pii_warning_data,
+                "auto_redacted": settings.PII_CHAT_AUTO_REDACT,
+            })
+
+        # ============================================================
+        # PII 阻擋模式：以正常回覆方式提示使用者
+        # ============================================================
+        if pii_blocked:
+            full_content = pii_block_message
+            yield _sse_json({
+                "type": "content",
+                "data": pii_block_message,
+                "accumulated": pii_block_message,
+            })
+            yield _sse_json({
+                "type": "complete",
+                "content": pii_block_message,
+                "thread_id": final_thread_id,
+                "session_id": final_session_id,
+                "pii_blocked": True,
+            })
+            yield "data: [DONE]\n\n"
+            return
 
         # ============================================================
         # 非 Agatha Agent → Mock 回覆
@@ -276,6 +357,7 @@ async def chat_stream(
                     assistant_message=full_content,
                     session_id=final_session_id,
                     thread_id=None,
+                    images=images if images else None,
                 )
             except Exception as e:
                 logger.warning(f"⚠️ 儲存 mock 對話失敗: {e}")
@@ -299,10 +381,13 @@ async def chat_stream(
         try:
             agatha_payload = {
                 "api_key": settings.AGATHA_API_KEY,
-                "query": body.message,
+                "query": redacted_message,
                 "thread_id": existing_thread_id,
                 "streaming": True,
             }
+            # 如果有圖片，加入 payload（等 Agatha Public API 支援後即可生效）
+            if images:
+                agatha_payload["images"] = images
 
             async with client.stream(
                 "POST",
@@ -385,10 +470,13 @@ async def chat_stream(
             try:
                 agatha_payload = {
                     "api_key": settings.AGATHA_API_KEY,
-                    "query": body.message,
+                    "query": redacted_message,
                     "thread_id": existing_thread_id,
                     "streaming": False,
                 }
+                # 如果有圖片，加入 payload
+                if images:
+                    agatha_payload["images"] = images
 
                 resp = await client.post(
                     settings.AGATHA_API_URL,
@@ -458,6 +546,7 @@ async def chat_stream(
                     assistant_message=full_content,
                     session_id=final_session_id,
                     thread_id=final_thread_id,
+                    images=images if images else None,
                 )
             except Exception as e:
                 logger.warning(f"⚠️ 儲存對話到 Portal MongoDB 失敗（不影響回覆）: {e}")
@@ -502,6 +591,54 @@ async def create_or_continue_chat(
 
     agent_name = await _get_agent_name(body.agent_id)
 
+    # PII 掃描與脫敏
+    query_for_ai = body.message
+    pii_blocked = False
+    try:
+        pii_svc = get_pii_service()
+        if pii_svc.enabled:
+            pii_result = pii_svc.scan_text(body.message)
+            if pii_result.has_pii:
+                logger.warning(
+                    f"⚠️ PII 偵測（非 streaming）: 含 {pii_result.entity_count} 個 PII 實體, user={email}"
+                )
+                # 阻擋模式：以正常回覆方式提示使用者，不拋 HTTP 錯誤
+                if settings.PII_BLOCK_CHAT:
+                    types_str = ", ".join(pii_result.entity_types)
+                    pii_blocked = True
+                    pii_block_reply = (
+                        f"⚠️ 偵測到您的訊息中包含 {pii_result.entity_count} 個個人敏感資訊"
+                        f"（{types_str}）。\n\n"
+                        f"為保護您的隱私安全，此訊息未被送出。請移除敏感資訊後重新發送。"
+                    )
+                else:
+                    # 脫敏模式
+                    if settings.PII_CHAT_AUTO_REDACT:
+                        query_for_ai = pii_svc.anonymize_text(body.message)
+    except Exception as e:
+        logger.warning(f"⚠️ 聊天 PII 掃描失敗（不影響發送）: {e}")
+
+    # PII 阻擋模式：直接回傳提示訊息，不呼叫 AI
+    if pii_blocked:
+        user_message = {
+            "role": "user",
+            "content": body.message,
+            "timestamp": now.isoformat(),
+        }
+        assistant_message = {
+            "role": "assistant",
+            "content": pii_block_reply,
+            "timestamp": now.isoformat(),
+        }
+        return ChatResponse(
+            chat_id="",
+            agent_id=body.agent_id,
+            agent_name=agent_name,
+            messages=[user_message, assistant_message],
+            created_at=now,
+            updated_at=now,
+        )
+
     user_message = {
         "role": "user",
         "content": body.message,
@@ -515,7 +652,7 @@ async def create_or_continue_chat(
             client = _get_agatha_client()
             agatha_payload = {
                 "api_key": settings.AGATHA_API_KEY,
-                "query": body.message,
+                "query": query_for_ai,
                 "thread_id": None,
                 "streaming": False,
             }

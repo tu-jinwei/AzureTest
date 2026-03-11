@@ -31,6 +31,7 @@ const Sidebar = ({ collapsed }) => {
 
   const isActive = (path) => location.pathname === path;
   const isParentActive = (paths) => paths.some((p) => location.pathname.startsWith(p));
+  const isExactActive = (path) => location.pathname === path;
 
   // 根據使用者權限動態產生設定子選單
   const settingsChildren = [];
@@ -58,6 +59,7 @@ const Sidebar = ({ collapsed }) => {
       key: 'agent-store',
       icon: <RobotOutlined />,
       label: t('sidebar.agentStore'),
+      path: '/agent-store',
       children: [
         { key: 'chat', icon: <MessageOutlined />, label: t('sidebar.chat'), path: '/agent-store/chat' },
         { key: 'history', icon: <HistoryOutlined />, label: t('sidebar.chatHistory'), path: '/agent-store/history' },
@@ -87,18 +89,33 @@ const Sidebar = ({ collapsed }) => {
       <nav className="sidebar-nav">
         {menuItems.map((item) => {
           if (item.children) {
+            const allPaths = [...item.children.map((c) => c.path), ...(item.path ? [item.path] : [])];
             const isExpanded = expandedMenus[item.key] || isParentActive(item.children.map((c) => c.path));
+            const parentActive = isParentActive(allPaths);
             return (
               <div key={item.key} className="sidebar-menu-group">
                 <div
-                  className={`sidebar-item sidebar-parent ${isParentActive(item.children.map((c) => c.path)) ? 'active-parent' : ''}`}
-                  onClick={() => toggleMenu(item.key)}
+                  className={`sidebar-item sidebar-parent ${parentActive ? 'active-parent' : ''}`}
+                  onClick={() => {
+                    if (item.path) {
+                      navigate(item.path);
+                      if (!isExpanded) toggleMenu(item.key);
+                    } else {
+                      toggleMenu(item.key);
+                    }
+                  }}
                 >
                   <span className="sidebar-item-icon">{item.icon}</span>
                   {!collapsed && (
                     <>
                       <span className="sidebar-item-label">{item.label}</span>
-                      <span className="sidebar-expand-icon">
+                      <span
+                        className="sidebar-expand-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleMenu(item.key);
+                        }}
+                      >
                         {isExpanded ? <DownOutlined /> : <RightOutlined />}
                       </span>
                     </>

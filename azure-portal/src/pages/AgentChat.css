@@ -245,6 +245,95 @@
   }
 }
 
+/* ===== 圖片預覽條（輸入框上方） ===== */
+.chat-image-preview-strip {
+  display: flex;
+  gap: 10px;
+  padding: 10px 20px 0;
+  background: #fafafa;
+  border-top: 1px solid var(--border-color);
+  overflow-x: auto;
+  flex-wrap: wrap;
+}
+
+.chat-image-preview-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 72px;
+  flex-shrink: 0;
+}
+
+.chat-image-preview-thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.chat-image-preview-remove {
+  position: absolute;
+  top: -6px;
+  right: -2px;
+  font-size: 16px;
+  color: #ff4d4f;
+  cursor: pointer;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.chat-image-preview-remove:hover {
+  transform: scale(1.2);
+}
+
+.chat-image-preview-name {
+  font-size: 10px;
+  color: var(--text-light);
+  margin-top: 4px;
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* ===== 訊息中的圖片縮圖 ===== */
+.chat-message-images {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.chat-message-image-thumb {
+  width: 120px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.chat-message-image-thumb:hover {
+  opacity: 0.85;
+  transform: scale(1.03);
+}
+
+/* ===== 上傳按鈕 ===== */
+.chat-upload-btn {
+  font-size: 18px;
+  color: var(--text-light);
+  flex-shrink: 0;
+}
+
+.chat-upload-btn:hover {
+  color: var(--primary-color) !important;
+}
+
 .chat-input-area {
   display: flex;
   align-items: flex-end;
@@ -252,6 +341,11 @@
   padding: 16px 20px;
   border-top: 1px solid var(--border-color);
   background: #fafafa;
+}
+
+.chat-image-preview-strip + .chat-input-area {
+  border-top: none;
+  padding-top: 10px;
 }
 
 .chat-input-area .ant-input {

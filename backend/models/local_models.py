@@ -53,6 +53,7 @@ class LocalLibraryCatalog(LocalBase):
     catalog_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     library_name = Column(String(255), nullable=False, unique=True)
     description = Column(Text)
+    image_url = Column(Text)  # 館封面圖片路徑
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 

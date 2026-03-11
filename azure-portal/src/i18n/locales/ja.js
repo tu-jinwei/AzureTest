@@ -137,6 +137,25 @@ const ja = {
     // 全エージェントモーダル
     viewAllAgents: 'すべてのAgent を表示（{count} 件）',
     allAgentsTitle: 'すべての AI エージェント',
+    // 画像アップロード
+    uploadImage: '画像をアップロード',
+    imageMessage: '[画像]',
+    maxImagesWarning: '最大 {max} 枚の画像のみアップロードできます',
+    notImageFile: '{name} は画像ファイルではありません',
+    imageTooLarge: '{name} は 10MB のサイズ制限を超えています',
+    imageReadFailed: '{name} の読み取りに失敗しました',
+  },
+
+  // ===== Agent Store =====
+  agentStore: {
+    title: 'Agent Store',
+    loading: 'Agent リストを読み込み中...',
+    searchPlaceholder: 'Agent を検索...',
+    totalAgents: '合計 {count} 個の Agent',
+    noAgents: '利用可能な Agent がありません',
+    noResults: '検索条件に一致する Agent がありません',
+    noDescription: '説明なし',
+    startChat: 'チャット開始',
   },
 
   // ===== チャット履歴 =====
@@ -296,6 +315,22 @@ const ja = {
     fileSizeExceeded: 'ファイル合計サイズ {size} MB が 100 MB の上限を超えています',
     fileUploaded: 'アップロード済み',
     fileNotUploaded: '未アップロード',
+    coverImage: 'カバー画像',
+    uploadImage: 'アップロード',
+    changeImage: '変更',
+    deleteImage: '画像を削除',
+    coverImageTitle: 'カバー画像 - {name}',
+    coverImageHint: 'このライブラリのカバー画像をアップロード（PNG・JPG、最大5MB）',
+    coverImageUploaded: 'カバー画像がアップロードされました',
+    coverImageUploadFailed: 'カバー画像のアップロードに失敗しました',
+    coverImageDeleted: 'カバー画像が削除されました',
+    coverImageDeleteFailed: 'カバー画像の削除に失敗しました',
+    deleteCoverImageConfirm: 'このカバー画像を削除してもよろしいですか？',
+    currentCoverImage: '現在のカバー画像：',
+    imagePreview: 'プレビュー：',
+    dragImageHint: 'クリックまたはドラッグで画像をアップロード',
+    imageFormatHint: 'PNG・JPG形式のみ、最大5MB',
+    imageSizeExceeded: '画像サイズが5MBの上限を超えています',
   },
 
   // ===== ユーザー管理 =====

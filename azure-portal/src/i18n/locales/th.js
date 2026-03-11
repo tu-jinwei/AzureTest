@@ -137,6 +137,25 @@ const th = {
     // โมดอล Agent ทั้งหมด
     viewAllAgents: 'ดู Agent ทั้งหมด ({count} รายการ)',
     allAgentsTitle: 'AI Agent ทั้งหมด',
+    // อัปโหลดรูปภาพ
+    uploadImage: 'อัปโหลดรูปภาพ',
+    imageMessage: '[รูปภาพ]',
+    maxImagesWarning: 'อัปโหลดได้สูงสุด {max} รูป',
+    notImageFile: '{name} ไม่ใช่ไฟล์รูปภาพ',
+    imageTooLarge: '{name} เกินขนาดจำกัด 10MB',
+    imageReadFailed: 'อ่าน {name} ไม่สำเร็จ',
+  },
+
+  // ===== Agent Store =====
+  agentStore: {
+    title: 'Agent Store',
+    loading: 'กำลังโหลดรายการ Agent...',
+    searchPlaceholder: 'ค้นหา Agent...',
+    totalAgents: 'ทั้งหมด {count} Agent',
+    noAgents: 'ไม่มี Agent ที่ใช้งานได้',
+    noResults: 'ไม่พบ Agent ที่ตรงกับการค้นหา',
+    noDescription: 'ไม่มีคำอธิบาย',
+    startChat: 'เริ่มแชท',
   },
 
   // ===== ประวัติแชท =====
@@ -296,6 +315,22 @@ const th = {
     fileSizeExceeded: 'ขนาดไฟล์รวม {size} MB เกินขีดจำกัด 100 MB',
     fileUploaded: 'อัปโหลดแล้ว',
     fileNotUploaded: 'ยังไม่อัปโหลด',
+    coverImage: 'ภาพปก',
+    uploadImage: 'อัปโหลด',
+    changeImage: 'เปลี่ยน',
+    deleteImage: 'ลบภาพ',
+    coverImageTitle: 'ภาพปก - {name}',
+    coverImageHint: 'อัปโหลดภาพปกสำหรับห้องสมุดนี้ (PNG หรือ JPG, สูงสุด 5MB)',
+    coverImageUploaded: 'อัปโหลดภาพปกสำเร็จ',
+    coverImageUploadFailed: 'อัปโหลดภาพปกล้มเหลว',
+    coverImageDeleted: 'ลบภาพปกสำเร็จ',
+    coverImageDeleteFailed: 'ลบภาพปกล้มเหลว',
+    deleteCoverImageConfirm: 'คุณแน่ใจหรือไม่ว่าต้องการลบภาพปกนี้?',
+    currentCoverImage: 'ภาพปกปัจจุบัน:',
+    imagePreview: 'ตัวอย่าง:',
+    dragImageHint: 'คลิกหรือลากภาพมาที่นี่',
+    imageFormatHint: 'รองรับเฉพาะ PNG และ JPG สูงสุด 5MB',
+    imageSizeExceeded: 'ขนาดภาพเกิน 5MB',
   },
 
   // ===== จัดการผู้ใช้ =====

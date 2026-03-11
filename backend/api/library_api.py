@@ -26,6 +26,7 @@ from models.schemas import (
     MessageResponse,
 )
 from services.storage_service import storage_service
+from services.pii_service import get_pii_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -85,6 +86,7 @@ async def list_catalogs(
             catalog_id=str(cat.catalog_id),
             library_name=cat.library_name,
             description=cat.description,
+            image_url=cat.image_url,
             doc_count=count_map.get(cat.library_name, 0),
             created_at=cat.created_at,
         )
@@ -126,9 +128,161 @@ async def create_catalog(
         catalog_id=str(catalog.catalog_id),
         library_name=catalog.library_name,
         description=catalog.description,
+        image_url=catalog.image_url,
         doc_count=0,
         created_at=catalog.created_at,
     )
+
+
+@router.post("/catalogs/{catalog_id}/image", response_model=MessageResponse)
+async def upload_catalog_image(
+    catalog_id: str,
+    file: UploadFile = File(...),
+    country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
+    payload: dict = Depends(require_permission("manage_library")),
+):
+    """上傳館封面圖片（僅限 PNG/JPG）"""
+    target_country = _resolve_country(payload, country)
+
+    # 驗證檔案類型
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="未提供檔案")
+    ext = file.filename.lower().rsplit('.', 1)[-1] if '.' in file.filename else ''
+    if ext not in ('png', 'jpg', 'jpeg'):
+        raise HTTPException(status_code=400, detail="僅支援 PNG 或 JPG 格式")
+
+    # 驗證檔案大小（5MB 上限）
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="圖片大小不可超過 5MB")
+    await file.seek(0)
+
+    # 驗證 catalog 存在
+    session = await data_router.get_local_pg(target_country)
+    try:
+        result = await session.execute(
+            select(LocalLibraryCatalog).where(
+                LocalLibraryCatalog.catalog_id == catalog_id
+            )
+        )
+        catalog = result.scalar_one_or_none()
+        if not catalog:
+            raise HTTPException(status_code=404, detail="館不存在")
+    finally:
+        await session.close()
+
+    # 刪除舊圖片（如果有的話）
+    if catalog.image_url:
+        storage_service.delete_files(target_country, "catalog", catalog_id)
+
+    # 重新命名檔案為 cover.{ext}（避免超長中文檔名導致 OS 錯誤）
+    file.filename = f"cover.{ext}"
+
+    # 儲存圖片
+    file_result = await storage_service.save_file(
+        target_country, "catalog", catalog_id, file
+    )
+
+    # 更新 DB
+    session = await data_router.get_local_pg(target_country)
+    try:
+        await session.execute(
+            update(LocalLibraryCatalog)
+            .where(LocalLibraryCatalog.catalog_id == catalog_id)
+            .values(image_url=file_result["relative_path"])
+        )
+        await session.commit()
+    finally:
+        await session.close()
+
+    logger.info(f"館封面圖片已上傳: catalog_id={catalog_id}, path={file_result['relative_path']}")
+    return MessageResponse(message="封面圖片已上傳", detail=file_result["relative_path"])
+
+
+@router.delete("/catalogs/{catalog_id}/image", response_model=MessageResponse)
+async def delete_catalog_image(
+    catalog_id: str,
+    country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
+    payload: dict = Depends(require_permission("manage_library")),
+):
+    """刪除館封面圖片"""
+    target_country = _resolve_country(payload, country)
+
+    session = await data_router.get_local_pg(target_country)
+    try:
+        result = await session.execute(
+            select(LocalLibraryCatalog).where(
+                LocalLibraryCatalog.catalog_id == catalog_id
+            )
+        )
+        catalog = result.scalar_one_or_none()
+        if not catalog:
+            raise HTTPException(status_code=404, detail="館不存在")
+        if not catalog.image_url:
+            raise HTTPException(status_code=404, detail="該館沒有封面圖片")
+    finally:
+        await session.close()
+
+    # 刪除實體檔案
+    storage_service.delete_files(target_country, "catalog", catalog_id)
+
+    # 更新 DB
+    session = await data_router.get_local_pg(target_country)
+    try:
+        await session.execute(
+            update(LocalLibraryCatalog)
+            .where(LocalLibraryCatalog.catalog_id == catalog_id)
+            .values(image_url=None)
+        )
+        await session.commit()
+    finally:
+        await session.close()
+
+    logger.info(f"館封面圖片已刪除: catalog_id={catalog_id}")
+    return MessageResponse(message="封面圖片已刪除")
+
+
+@router.get("/catalogs/{catalog_id}/image")
+async def get_catalog_image(
+    catalog_id: str,
+    country: Optional[str] = Query(None, description="國家代碼（僅 super_admin 可跨國）"),
+    payload: dict = Depends(get_current_user_payload),
+):
+    """取得館封面圖片"""
+    target_country = _resolve_country(payload, country)
+
+    session = await data_router.get_local_pg(target_country)
+    try:
+        result = await session.execute(
+            select(LocalLibraryCatalog).where(
+                LocalLibraryCatalog.catalog_id == catalog_id
+            )
+        )
+        catalog = result.scalar_one_or_none()
+        if not catalog or not catalog.image_url:
+            raise HTTPException(status_code=404, detail="圖片不存在")
+    finally:
+        await session.close()
+
+    # 從 image_url 解析出實際路徑
+    # image_url 格式: "uploads/{country}/catalog/{catalog_id}/{filename}"
+    parts = catalog.image_url.split('/')
+    if len(parts) >= 5:
+        filename = parts[-1]
+    else:
+        raise HTTPException(status_code=404, detail="圖片路徑無效")
+
+    file_path = storage_service.get_file_path(
+        target_country, "catalog", catalog_id, filename
+    )
+    if not file_path:
+        raise HTTPException(status_code=404, detail="圖片檔案不存在")
+
+    # 判斷 media type
+    ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
+    media_type = "image/png" if ext == "png" else "image/jpeg"
+
+    return FileResponse(path=str(file_path), media_type=media_type)
 
 
 # ===== 文件列表 API =====
@@ -302,8 +456,74 @@ async def upload_document(
         except Exception as e:
             logger.warning(f"檔案上傳失敗: {e}")
 
+    # PII 掃描
+    pii_scan_results = []
+    pii_warning = ""
+    try:
+        pii_svc = get_pii_service()
+        if pii_svc.enabled and files_info:
+            from pathlib import Path
+            for fi in files_info:
+                file_path = storage_service.get_file_path(
+                    target_country, "library", doc_id, fi["filename"]
+                )
+                if file_path:
+                    scan_result = await pii_svc.scan_file(file_path)
+                    pii_scan_results.append({
+                        "filename": fi["filename"],
+                        **scan_result.to_dict(),
+                    })
+                    if scan_result.has_pii:
+                        logger.warning(
+                            f"⚠️ PII 偵測: 圖書館文件 {doc_id}/{fi['filename']} "
+                            f"含 {scan_result.entity_count} 個 PII 實體 "
+                            f"({', '.join(scan_result.entity_types)})"
+                        )
+            # 檢查是否有 PII 檔案
+            pii_files = [r for r in pii_scan_results if r.get("has_pii")]
+            if pii_files:
+                if settings.PII_BLOCK_UPLOAD:
+                    # 阻擋模式：清理已儲存的檔案 + 刪除 DB 記錄
+                    storage_service.delete_files(target_country, "library", doc_id)
+                    session = await data_router.get_local_pg(target_country)
+                    try:
+                        from sqlalchemy import delete as sql_delete
+                        await session.execute(
+                            sql_delete(LocalLibrary).where(LocalLibrary.doc_id == doc_id)
+                        )
+                        await session.commit()
+                    finally:
+                        await session.close()
+                    # 組合被阻擋的檔案資訊
+                    blocked_details = []
+                    for pf in pii_files:
+                        types_str = ", ".join(pf.get("entity_types", []))
+                        blocked_details.append(
+                            f"「{pf['filename']}」含 {pf.get('entity_count', 0)} 個 PII（{types_str}）"
+                        )
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"上傳被拒絕：偵測到個人敏感資訊（PII）。{'; '.join(blocked_details)}。請移除敏感資訊後重新上傳。",
+                    )
+                else:
+                    # 警告模式（原有行為）
+                    pii_warning = f"⚠️ {len(pii_files)} 個檔案偵測到個人敏感資訊（PII）"
+    except HTTPException:
+        raise  # 重新拋出 PII 阻擋的 HTTPException
+    except Exception as e:
+        logger.warning(f"⚠️ PII 掃描失敗（不影響上傳）: {e}")
+
     # 更新 DB
     if files_info:
+        metadata = {
+            "file_count": len(files_info),
+            "total_size": sum(f["file_size"] for f in files_info),
+            "original_filename": files_info[0]["filename"] if files_info else None,
+        }
+        # 加入 PII 掃描結果
+        if pii_scan_results:
+            metadata["pii_scan"] = pii_scan_results
+
         session = await data_router.get_local_pg(target_country)
         try:
             await session.execute(
@@ -312,18 +532,17 @@ async def upload_document(
                 .values(
                     file_url=first_file_url,
                     files_json=files_info,
-                    metadata_json={
-                        "file_count": len(files_info),
-                        "total_size": sum(f["file_size"] for f in files_info),
-                        "original_filename": files_info[0]["filename"] if files_info else None,
-                    },
+                    metadata_json=metadata,
                 )
             )
             await session.commit()
         finally:
             await session.close()
 
-    return MessageResponse(message="文件已上傳", detail=doc_id)
+    msg = "文件已上傳"
+    if pii_warning:
+        msg += f"。{pii_warning}"
+    return MessageResponse(message=msg, detail=doc_id)
 
 
 @router.delete("/by-library/{library_name}", response_model=MessageResponse)
@@ -559,7 +778,61 @@ async def upload_document_file(
     if not current_file_url and current_files:
         current_file_url = current_files[0].get("relative_path")
 
+    # PII 掃描新上傳的檔案
+    pii_scan_results = []
+    pii_warning = ""
+    try:
+        pii_svc = get_pii_service()
+        if pii_svc.enabled and new_files:
+            for fi in new_files:
+                file_path = storage_service.get_file_path(
+                    target_country, "library", doc_id, fi["filename"]
+                )
+                if file_path:
+                    scan_result = await pii_svc.scan_file(file_path)
+                    pii_scan_results.append({
+                        "filename": fi["filename"],
+                        **scan_result.to_dict(),
+                    })
+                    if scan_result.has_pii:
+                        logger.warning(
+                            f"⚠️ PII 偵測: 圖書館追加附件 {doc_id}/{fi['filename']} "
+                            f"含 {scan_result.entity_count} 個 PII 實體"
+                        )
+            pii_files = [r for r in pii_scan_results if r.get("has_pii")]
+            if pii_files:
+                if settings.PII_BLOCK_UPLOAD:
+                    # 阻擋模式：刪除本次新上傳的檔案（不影響已有附件）
+                    for fi in new_files:
+                        storage_service.delete_single_file(
+                            target_country, "library", doc_id, fi["filename"]
+                        )
+                    blocked_details = []
+                    for pf in pii_files:
+                        types_str = ", ".join(pf.get("entity_types", []))
+                        blocked_details.append(
+                            f"「{pf['filename']}」含 {pf.get('entity_count', 0)} 個 PII（{types_str}）"
+                        )
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"上傳被拒絕：偵測到個人敏感資訊（PII）。{'; '.join(blocked_details)}。請移除敏感資訊後重新上傳。",
+                    )
+                else:
+                    pii_warning = f"⚠️ {len(pii_files)} 個檔案偵測到個人敏感資訊（PII）"
+    except HTTPException:
+        raise  # 重新拋出 PII 阻擋的 HTTPException
+    except Exception as e:
+        logger.warning(f"⚠️ PII 掃描失敗（不影響上傳）: {e}")
+
     # 更新 DB
+    metadata = {
+        "file_count": len(current_files),
+        "total_size": sum(f.get("file_size", 0) for f in current_files),
+        "original_filename": current_files[0]["filename"] if current_files else None,
+    }
+    if pii_scan_results:
+        metadata["pii_scan"] = pii_scan_results
+
     session = await data_router.get_local_pg(target_country)
     try:
         await session.execute(
@@ -568,11 +841,7 @@ async def upload_document_file(
             .values(
                 file_url=current_file_url,
                 files_json=current_files,
-                metadata_json={
-                    "file_count": len(current_files),
-                    "total_size": sum(f.get("file_size", 0) for f in current_files),
-                    "original_filename": current_files[0]["filename"] if current_files else None,
-                },
+                metadata_json=metadata,
             )
         )
         await session.commit()
@@ -580,8 +849,11 @@ async def upload_document_file(
         await session.close()
 
     uploaded_names = [f["filename"] for f in new_files]
+    msg = f"已追加上傳 {len(new_files)} 個附件"
+    if pii_warning:
+        msg += f"。{pii_warning}"
     return MessageResponse(
-        message=f"已追加上傳 {len(new_files)} 個附件",
+        message=msg,
         detail=", ".join(uploaded_names),
     )
 

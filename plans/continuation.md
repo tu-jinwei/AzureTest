@@ -401,6 +401,71 @@ services/storage_service.py      # 本地檔案儲存服務（uploads/ 目錄管
 - **遷移腳本** `migrations/add_library_catalog.py`：自動建立 catalog 表 + 從現有 library 資料填充
 - **Fallback 機制**：`fetchLibrary()` 在 catalog API 失敗或回傳空時，從文件資料中提取館名作為 fallback（`LibrarySettings.jsx` + `Library.jsx`）
 
+### ✅ Phase 6.1：PII Detection & Redaction（2026-03-11）
+
+**使用 Microsoft Presidio（開源 Python 框架）建立 PII 偵測與遮蔽服務，整合到所有檔案上傳和聊天訊息流程。**
+
+**新增檔案：**
+- `services/pii_service.py` — PII 掃描/脫敏核心服務
+  - 優先使用 Presidio（如已安裝），否則 fallback 到內建正則引擎
+  - 支援台灣特有 PII：身分證字號（含驗證碼驗證）、手機號碼、市話、統一編號
+  - 支援通用 PII：Email、信用卡號、IP 位址
+  - 檔案文字提取：PDF（pdfplumber）、DOCX（python-docx）、TXT/CSV
+  - 三種遮蔽模式：replace（`<PII_TYPE>`）、mask（`***`）、hash
+- `api/pii_api.py` — 獨立 PII 掃描 API（測試/管理用）
+  - `GET /api/pii/status` — 服務狀態
+  - `POST /api/pii/scan` — 掃描文字中的 PII
+  - `POST /api/pii/redact` — 脫敏文字中的 PII
+
+**修改檔案：**
+- `config.py` — 新增 PII 設定（`PII_ENABLED`、`PII_LANGUAGES`、`PII_CONFIDENCE_THRESHOLD`、`PII_CHAT_AUTO_REDACT`、`PII_REDACT_MODE`）
+- `requirements.txt` — 新增 `presidio-analyzer`、`presidio-anonymizer`、`spacy`、`pdfplumber`、`python-docx`
+- `main.py` — 註冊 `pii_api` router + lifespan 中初始化 PII 服務
+- `api/library_api.py` — 圖書館上傳（`upload_document` + `upload_document_file`）整合 PII 掃描，結果存入 `metadata_json.pii_scan`
+- `api/announcement_api.py` — 公告附件上傳整合 PII 掃描，結果存入每個檔案的 `pii_detected` 欄位
+- `api/chat_api.py` — 聊天訊息在送入 Agatha API 前自動掃描/脫敏（`PII_CHAT_AUTO_REDACT=true` 時），SSE 事件含 `pii_warning` 通知前端
+
+**設計文件：** `Azure/plans/pii-integration-plan.md`
+
+**環境變數（.env）：**
+```
+PII_ENABLED=true          # 功能開關（預設 false）
+PII_LANGUAGES=en,zh       # 掃描語言
+PII_CONFIDENCE_THRESHOLD=0.5  # 信心閾值
+PII_CHAT_AUTO_REDACT=true     # 聊天訊息自動脫敏（僅在 PII_BLOCK_CHAT=false 時生效）
+PII_REDACT_MODE=replace       # 遮蔽方式
+PII_BLOCK_UPLOAD=true         # 阻擋含 PII 的檔案上傳（Phase 6.2 新增）
+PII_BLOCK_CHAT=true           # 阻擋含 PII 的聊天訊息（Phase 6.2 新增）
+```
+
+**spaCy 模型安裝：** `python -m spacy download en_core_web_lg`
+
+### ✅ Phase 6.2：PII 阻擋上傳模式（2026-03-11）
+
+**將 PII 掃描從「僅警告」升級為「阻擋上傳」模式，偵測到 PII 時拒絕上傳/發送並清理已儲存的檔案。**
+
+**新增環境變數：**
+- `PII_BLOCK_UPLOAD`（預設 `true`）— 阻擋含 PII 的檔案上傳（圖書館 + 公告附件）
+- `PII_BLOCK_CHAT`（預設 `true`）— 阻擋含 PII 的聊天訊息
+
+**修改檔案：**
+- `config.py` — 新增 `PII_BLOCK_UPLOAD`、`PII_BLOCK_CHAT` 設定
+- `api/library_api.py` — `upload_document()` + `upload_document_file()` 阻擋邏輯：
+  - 偵測到 PII → 刪除已儲存的實體檔案 + 刪除 DB 記錄（新文件）或保留原有附件（追加附件）
+  - 回傳 HTTP 422 + 詳細的 PII 資訊（哪些檔案、幾個 PII、什麼類型）
+  - `PII_BLOCK_UPLOAD=false` 時退回原有的「僅警告」行為
+- `api/announcement_api.py` — `upload_announcement_file()` 同樣阻擋邏輯
+- `api/chat_api.py` — `chat_stream()` + `create_or_continue_chat()` 阻擋邏輯：
+  - 偵測到 PII → 回傳 HTTP 422（不送給 AI、不存入 MongoDB）
+  - `PII_BLOCK_CHAT=false` 時退回原有的「脫敏後送出」或「僅警告」行為
+
+**行為矩陣：**
+
+| 場景 | `PII_BLOCK_*=true` | `PII_BLOCK_*=false` + `AUTO_REDACT=true` | `PII_BLOCK_*=false` + `AUTO_REDACT=false` |
+|------|--------------------|-----------------------------------------|------------------------------------------|
+| 檔案上傳 | ❌ 422 拒絕 + 清理檔案 | ⚠️ 警告 + 正常上傳 | ⚠️ 警告 + 正常上傳 |
+| 聊天訊息 | ❌ 422 拒絕 | 🔒 脫敏後送 AI | ⚠️ 僅警告 + 原始訊息送 AI |
+
 ## 10. 待完成的工作
 
 ### 🔲 Phase 5：外部服務整合
@@ -423,6 +488,7 @@ services/storage_service.py      # 本地檔案儲存服務（uploads/ 目錄管
 - [ ] 稽核日誌完善（目前僅認證相關操作寫入 GlobalAuditLog，CRUD 操作未記錄）
 - [ ] JWT refresh token 機制
 - [ ] CORS 設定收緊（目前允許 localhost）
+- [x] **PII Detection & Redaction（個人可識別資訊偵測與遮蔽）** → 已完成基礎實作（Phase 6.1）+ 阻擋上傳模式（Phase 6.2）
 
 ### 🔲 Phase 7：測試與優化
 - [ ] 前端單元測試
@@ -515,10 +581,13 @@ services/storage_service.py      # 本地檔案儲存服務（uploads/ 目錄管
 - Vite build 產出 > 500KB 的 chunk（建議做 code splitting）
 - ~~**圖書館館名消失問題**~~ → 已在 Phase 4.8 解決（館名改為獨立的 `local_library_catalog` 表）
 - `super_admin` 不指定國家時，公告/圖書館預設顯示自己國家（TW）的資料，若要看全部國家需逐一切換
+- ⚠️ **下載檔案連結安全性**：若未來改為產生下載連結（如 Azure Blob Storage SAS URL），連結中**不能包含 "ctbc" 或其他敏感資訊**（公司名稱、內部路徑等）。目前下載方式為後端 `FileResponse` 直接串流二進位資料（不產生公開連結），暫無此問題，但切換到 Blob Storage 時需特別注意 URL 路徑命名規則。
 
 ## 11. Git 歷史
 
 ```
+(pending) feat: Phase 6.2 PII 阻擋上傳模式 — 偵測到 PII 時拒絕上傳/發送 + 清理檔案
+(pending) feat: Phase 6.1 PII Detection & Redaction — Presidio 整合 + 三場景掃描/脫敏
 (pending) fix: 對話歷史頁面小螢幕水平溢出修復 — Layout/ChatHistory CSS min-width + 響應式
 (pending) feat: Phase 4.8 圖書館館名獨立表 — local_library_catalog + catalog API
 (pending) fix: 5 個已知 Bug 修復（ACL 儲存、Agent 卡片、圖書館卡片、PDF Modal、公告欄）
@@ -533,4 +602,4 @@ services/storage_service.py      # 本地檔案儲存服務（uploads/ 目錄管
 
 ---
 
-> **最後更新**：2026-03-06
+> **最後更新**：2026-03-11

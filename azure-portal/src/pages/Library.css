@@ -30,14 +30,45 @@
   box-shadow: var(--card-shadow);
   display: flex;
   flex-direction: column;
-  /* 固定卡片高度，避免分頁切換時高度變動 */
-  height: 380px;
+  /* 固定卡片高度，避免分頁切換時高度變動（含圖片區域） */
+  height: 500px;
+  overflow: hidden;
 }
 
 @media (max-width: 768px) {
   .library-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* 卡片封面圖片區域 */
+.library-card-image {
+  width: 100%;
+  height: 160px;
+  flex-shrink: 0;
+  overflow: hidden;
+  cursor: pointer;
+  background: #f5f7fa;
+}
+
+.library-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s;
+}
+
+.library-card-image:hover img {
+  transform: scale(1.05);
+}
+
+.library-card-image-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f0f5ff 0%, #e6f0ff 100%);
 }
 
 .library-card-header {
@@ -47,6 +78,7 @@
   border-bottom: 1px solid var(--border-color);
   cursor: pointer;
   transition: background 0.2s;
+  flex-shrink: 0;
 }
 
 .library-card-header:hover {
@@ -68,7 +100,7 @@
 .library-card-docs {
   padding: 14px 24px;
   flex: 1;
-  overflow-y: auto;
+  overflow-y: hidden;
 }
 
 .library-card-doc-item {
@@ -170,6 +202,7 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 300px;
 }
 
 /* === 封面模式（初始狀態） === */

@@ -137,6 +137,25 @@ const vi = {
     // Modal tất cả Agent
     viewAllAgents: 'Xem tất cả Agent ({count})',
     allAgentsTitle: 'Tất cả AI Agent',
+    // Tải lên hình ảnh
+    uploadImage: 'Tải lên hình ảnh',
+    imageMessage: '[Hình ảnh]',
+    maxImagesWarning: 'Chỉ có thể tải lên tối đa {max} hình ảnh',
+    notImageFile: '{name} không phải là tệp hình ảnh',
+    imageTooLarge: '{name} vượt quá giới hạn 10MB',
+    imageReadFailed: 'Không thể đọc {name}',
+  },
+
+  // ===== Agent Store =====
+  agentStore: {
+    title: 'Agent Store',
+    loading: 'Đang tải danh sách Agent...',
+    searchPlaceholder: 'Tìm kiếm Agent...',
+    totalAgents: 'Tổng cộng {count} Agent',
+    noAgents: 'Không có Agent nào khả dụng',
+    noResults: 'Không tìm thấy Agent phù hợp',
+    noDescription: 'Không có mô tả',
+    startChat: 'Bắt đầu trò chuyện',
   },
 
   // ===== Lịch sử trò chuyện =====
@@ -296,6 +315,22 @@ const vi = {
     fileSizeExceeded: 'Tổng dung lượng tệp {size} MB vượt quá giới hạn 100 MB',
     fileUploaded: 'Đã tải lên',
     fileNotUploaded: 'Chưa tải lên',
+    coverImage: 'Ảnh bìa',
+    uploadImage: 'Tải lên',
+    changeImage: 'Thay đổi',
+    deleteImage: 'Xóa ảnh',
+    coverImageTitle: 'Ảnh bìa - {name}',
+    coverImageHint: 'Tải lên ảnh bìa cho thư viện này (PNG hoặc JPG, tối đa 5MB)',
+    coverImageUploaded: 'Đã tải lên ảnh bìa',
+    coverImageUploadFailed: 'Tải lên ảnh bìa thất bại',
+    coverImageDeleted: 'Đã xóa ảnh bìa',
+    coverImageDeleteFailed: 'Xóa ảnh bìa thất bại',
+    deleteCoverImageConfirm: 'Bạn có chắc chắn muốn xóa ảnh bìa này?',
+    currentCoverImage: 'Ảnh bìa hiện tại:',
+    imagePreview: 'Xem trước:',
+    dragImageHint: 'Nhấp hoặc kéo ảnh vào đây',
+    imageFormatHint: 'Chỉ hỗ trợ PNG và JPG, tối đa 5MB',
+    imageSizeExceeded: 'Kích thước ảnh vượt quá 5MB',
   },
 
   // ===== Quản lý người dùng =====

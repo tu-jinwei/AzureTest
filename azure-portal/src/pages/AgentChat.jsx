@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Button, Tag, Input, Select, Empty, Spin, Popconfirm, message as antdMessage } from 'antd';
+import { Button, Tag, Input, Select, Empty, Spin, Popconfirm, Tooltip, message as antdMessage } from 'antd';
 import {
   SendOutlined,
   RobotOutlined,
@@ -10,6 +10,8 @@ import {
   ClockCircleOutlined,
   MessageOutlined,
   DeleteOutlined,
+  PaperClipOutlined,
+  CloseCircleFilled,
 } from '@ant-design/icons';
 import { useSearchParams } from 'react-router-dom';
 import { agentAPI, chatAPI } from '../services/api';
@@ -38,6 +40,10 @@ const AgentChat = () => {
   const [inputValue, setInputValue] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [sessionId, setSessionId] = useState(null);
+
+  // 圖片上傳狀態
+  const [selectedImages, setSelectedImages] = useState([]); // [{ file, base64, preview, name }]
+  const fileInputRef = useRef(null);
 
   // Refs
   const messagesEndRef = useRef(null);
@@ -258,18 +264,83 @@ const AgentChat = () => {
     setIsStreaming(false);
   }, []);
 
+  // ===== 圖片上傳相關 =====
+  const handleImageSelect = useCallback(async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+    const MAX_IMAGES = 5;
+
+    // 檢查數量限制
+    if (selectedImages.length + files.length > MAX_IMAGES) {
+      antdMessage.warning(t('agentChat.maxImagesWarning', { max: MAX_IMAGES }));
+      return;
+    }
+
+    const validImages = [];
+    for (const file of files) {
+      // 檢查是否為圖片
+      if (!file.type.startsWith('image/')) {
+        antdMessage.warning(t('agentChat.notImageFile', { name: file.name }));
+        continue;
+      }
+      // 檢查大小
+      if (file.size > MAX_IMAGE_SIZE) {
+        antdMessage.warning(t('agentChat.imageTooLarge', { name: file.name }));
+        continue;
+      }
+      // 轉 base64
+      try {
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        validImages.push({ file, base64, preview: base64, name: file.name });
+      } catch {
+        antdMessage.error(t('agentChat.imageReadFailed', { name: file.name }));
+      }
+    }
+
+    if (validImages.length > 0) {
+      setSelectedImages((prev) => [...prev, ...validImages]);
+    }
+
+    // 清空 input 以便重複選擇同一檔案
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, [selectedImages, t]);
+
+  const handleRemoveImage = useCallback((index) => {
+    setSelectedImages((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleOpenFilePicker = useCallback(() => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  }, []);
+
   // 發送訊息（Streaming）
   const handleSend = useCallback(() => {
-    if (!inputValue.trim() || !selectedAgent || isStreaming) return;
+    if ((!inputValue.trim() && selectedImages.length === 0) || !selectedAgent || isStreaming) return;
 
-    const userContent = inputValue.trim();
+    const userContent = inputValue.trim() || (selectedImages.length > 0 ? t('agentChat.imageMessage') : '');
     const now = new Date().toLocaleTimeString(timeLocale, {
       hour: '2-digit',
       minute: '2-digit',
     });
 
-    // 加入使用者訊息
-    const userMsg = { role: 'user', content: userContent, time: now };
+    // 加入使用者訊息（含圖片預覽）
+    const userMsg = {
+      role: 'user',
+      content: userContent,
+      time: now,
+      images: selectedImages.length > 0 ? selectedImages.map((img) => ({ preview: img.preview, name: img.name })) : undefined,
+    };
 
     // 加入空的 assistant 訊息（等待串流填充）
     const assistantMsg = {
@@ -279,8 +350,14 @@ const AgentChat = () => {
       isStreaming: true,
     };
 
+    // 準備圖片 base64 陣列
+    const imageData = selectedImages.length > 0
+      ? selectedImages.map((img) => img.base64)
+      : undefined;
+
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setInputValue('');
+    setSelectedImages([]);
     setIsStreaming(true);
 
     // 呼叫 streaming API
@@ -289,6 +366,7 @@ const AgentChat = () => {
         agent_id: selectedAgent.id,
         message: userContent,
         session_id: sessionId,
+        images: imageData,
       },
       // onMessage
       (eventData) => {
@@ -390,7 +468,7 @@ const AgentChat = () => {
     );
 
     abortRef.current = abort;
-  }, [inputValue, selectedAgent, isStreaming, sessionId, timeLocale, t, fetchSessions]);
+  }, [inputValue, selectedAgent, isStreaming, sessionId, timeLocale, t, fetchSessions, selectedImages]);
 
   // Loading 狀態
   if (loading) {
@@ -528,6 +606,20 @@ const AgentChat = () => {
                 <div
                   className={`chat-message-bubble ${msg.isError ? 'error' : ''}`}
                 >
+                  {/* 使用者訊息中的圖片預覽 */}
+                  {msg.role === 'user' && msg.images && msg.images.length > 0 && (
+                    <div className="chat-message-images">
+                      {msg.images.map((img, imgIdx) => (
+                        <img
+                          key={imgIdx}
+                          src={img.preview}
+                          alt={img.name || `image-${imgIdx}`}
+                          className="chat-message-image-thumb"
+                          onClick={() => window.open(img.preview, '_blank')}
+                        />
+                      ))}
+                    </div>
+                  )}
                   {msg.role === 'assistant' && msg.isStreaming && !msg.content ? (
                     <div className="typing-indicator">
                       <span></span>
@@ -550,7 +642,44 @@ const AgentChat = () => {
           <div ref={messagesEndRef} />
         </div>
 
+        {/* 圖片預覽條 */}
+        {selectedImages.length > 0 && (
+          <div className="chat-image-preview-strip">
+            {selectedImages.map((img, idx) => (
+              <div key={idx} className="chat-image-preview-item">
+                <img src={img.preview} alt={img.name} className="chat-image-preview-thumb" />
+                <CloseCircleFilled
+                  className="chat-image-preview-remove"
+                  onClick={() => handleRemoveImage(idx)}
+                />
+                <span className="chat-image-preview-name">{img.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="chat-input-area">
+          {/* 隱藏的檔案選擇器 */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            style={{ display: 'none' }}
+            onChange={handleImageSelect}
+          />
+
+          {/* 上傳圖片按鈕 */}
+          <Tooltip title={t('agentChat.uploadImage')}>
+            <Button
+              type="text"
+              icon={<PaperClipOutlined />}
+              onClick={handleOpenFilePicker}
+              disabled={!selectedAgent || isStreaming}
+              className="chat-upload-btn"
+            />
+          </Tooltip>
+
           <TextArea
             placeholder={
               selectedAgent
@@ -585,7 +714,7 @@ const AgentChat = () => {
               type="primary"
               icon={<SendOutlined />}
               onClick={handleSend}
-              disabled={!selectedAgent || !inputValue.trim()}
+              disabled={!selectedAgent || (!inputValue.trim() && selectedImages.length === 0)}
               style={{
                 background: 'var(--primary-color)',
                 borderColor: 'var(--primary-color)',
