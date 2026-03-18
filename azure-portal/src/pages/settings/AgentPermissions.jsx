@@ -12,11 +12,11 @@ import {
   Space,
   Badge,
   Spin,
-  Tooltip,
 } from 'antd';
 import {
   SafetyOutlined,
   UserAddOutlined,
+  UserOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
 import { agentAPI, userAPI } from '../../services/api';
@@ -43,6 +43,8 @@ const AgentPermissions = () => {
   const [targetKeys, setTargetKeys] = useState([]); // 已選的使用者 email
   const [allUsers, setAllUsers] = useState([]); // 真實使用者列表
   const [saving, setSaving] = useState(false);
+  // 追蹤正在切換上架狀態的 Agent ID（防止重複點擊）
+  const [publishingIds, setPublishingIds] = useState(new Set());
 
   // 載入真實使用者列表
   const fetchUsers = async () => {
@@ -88,12 +90,33 @@ const AgentPermissions = () => {
   }, []);
 
   const handlePublishToggle = async (agentId, checked) => {
+    // 防止重複點擊：若該 Agent 正在處理中，直接忽略
+    if (publishingIds.has(agentId)) return;
+
+    // 樂觀更新 UI（立即反映切換結果，提升體驗）
+    setAgentData((prev) =>
+      prev.map((a) => (a.id === agentId ? { ...a, published: checked } : a))
+    );
+    setPublishingIds((prev) => new Set(prev).add(agentId));
+
     try {
       await agentAPI.updatePublish(agentId, checked);
       message.success(checked ? t('agentPermissions.agentOnline') : t('agentPermissions.agentOffline'));
+      // 成功後重新拉取確保資料同步
       fetchAgents();
     } catch (err) {
+      // 失敗時回滾樂觀更新
+      setAgentData((prev) =>
+        prev.map((a) => (a.id === agentId ? { ...a, published: !checked } : a))
+      );
       message.error(t('agentPermissions.operationFailed') + '：' + (err.response?.data?.detail || err.message));
+    } finally {
+      // 無論成功或失敗，都解除鎖定
+      setPublishingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(agentId);
+        return next;
+      });
     }
   };
 
@@ -174,6 +197,8 @@ const AgentPermissions = () => {
       render: (_, record) => (
         <Switch
           checked={record.published}
+          loading={publishingIds.has(record.id)}
+          disabled={publishingIds.has(record.id)}
           onChange={(checked) => handlePublishToggle(record.id, checked)}
           checkedChildren={t('agentPermissions.online')}
           unCheckedChildren={t('agentPermissions.offline')}
@@ -185,24 +210,15 @@ const AgentPermissions = () => {
       key: 'acl',
       width: 220,
       render: (_, record) => {
-        const { roleCount, userCount } = getAclSummary(record);
+        const { userCount } = getAclSummary(record);
         return (
           <Space size={4}>
-            {roleCount > 0 && (
-              <Tooltip title={record.assignedRoles.map(r => ALL_ROLES.find(ar => ar.value === r)?.label || r).join('、')}>
-                <Tag icon={<TeamOutlined />} color="blue">
-                  {roleCount} {t('agentPermissions.roles')}
-                </Tag>
-              </Tooltip>
-            )}
             {userCount > 0 && (
-              <Tooltip title={record.assignedUsers.join('、')}>
-                <Tag icon={<UserAddOutlined />} color="green">
-                  {userCount} {t('agentPermissions.users')}
-                </Tag>
-              </Tooltip>
+              <Tag icon={<UserAddOutlined />} color="green">
+                {userCount} {t('agentPermissions.users')}
+              </Tag>
             )}
-            {roleCount === 0 && userCount === 0 && (
+            {userCount === 0 && (
               <Tag color="default">{t('agentPermissions.noAuthorization')}</Tag>
             )}
           </Space>
@@ -217,7 +233,7 @@ const AgentPermissions = () => {
         <Button
           type="primary"
           size="small"
-          icon={<SafetyOutlined />}
+          icon={<UserOutlined />}
           onClick={() => openAclModal(record)}
           style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
         >
