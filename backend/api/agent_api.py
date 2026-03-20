@@ -4,7 +4,7 @@ Agent API：列表/上架/下架/ACL 管理
 import logging
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, update
 
 from core.database import GlobalSessionLocal
@@ -12,6 +12,7 @@ from core.permissions import has_permission, require_permission
 from core.security import get_current_user_payload
 from models.global_models import AgentACL, AgentMaster
 from models.schemas import AgentACLInfo, AgentACLUpdate, AgentPublishUpdate, AgentResponse, MessageResponse
+from utils.audit_logger import audit_log, AuditAction
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -20,7 +21,7 @@ router = APIRouter()
 @router.get("", response_model=List[AgentResponse])
 async def list_agents(payload: dict = Depends(get_current_user_payload)):
     """
-    取得可用 Agent 列表（所有角色都依 ACL 過濾，包括 super_admin）
+    取得可用 Agent 列表（所有角色都依 ACL 過濾，包括 root）
     - 只有在 ACL 的 authorized_users 或 authorized_roles 中的使用者才能看到
     - 沒有 ACL 記錄的 Agent 不會顯示給任何人
     """
@@ -34,7 +35,7 @@ async def list_agents(payload: dict = Depends(get_current_user_payload)):
         )
         all_agents = result.scalars().all()
 
-        # 所有角色都需要檢查 ACL（包括 super_admin / platform_admin）
+        # 所有角色都需要檢查 ACL（包括 root / admin）
         authorized_agents = []
         for agent in all_agents:
             acl_result = await session.execute(
@@ -70,10 +71,23 @@ async def list_all_agents(
 async def update_publish_status(
     agent_id: str,
     body: AgentPublishUpdate,
+    request: Request,
     payload: dict = Depends(require_permission("manage_agent_permissions")),
 ):
     """上架/下架 Agent"""
+    operator_email = payload.get("sub", "")
+    operator_country = payload.get("country", "TW")
+
+    # 先查詢 Agent 名稱（用於日誌）
+    agent_name = agent_id
     async with GlobalSessionLocal() as session:
+        agent_result = await session.execute(
+            select(AgentMaster).where(AgentMaster.agent_id == agent_id)
+        )
+        agent = agent_result.scalar_one_or_none()
+        if agent:
+            agent_name = agent.name
+
         result = await session.execute(
             update(AgentMaster)
             .where(AgentMaster.agent_id == agent_id)
@@ -83,17 +97,29 @@ async def update_publish_status(
             raise HTTPException(status_code=404, detail="Agent 不存在")
         await session.commit()
 
-    action = "上架" if body.is_published else "下架"
-    return MessageResponse(message=f"Agent 已{action}")
+    action_label = "上架" if body.is_published else "下架"
+    audit_log(
+        action=AuditAction.AGENT_PUBLISH if body.is_published else AuditAction.AGENT_UNPUBLISH,
+        operator_email=operator_email,
+        country_code=operator_country,
+        target=agent_id,
+        details={"agent_name": agent_name, "is_published": body.is_published},
+        request=request,
+    )
+    return MessageResponse(message=f"Agent 已{action_label}")
 
 
 @router.put("/{agent_id}/acl", response_model=MessageResponse)
 async def update_agent_acl(
     agent_id: str,
     body: AgentACLUpdate,
+    request: Request,
     payload: dict = Depends(require_permission("manage_agent_permissions")),
 ):
     """更新 Agent 授權規則"""
+    operator_email = payload.get("sub", "")
+    operator_country = payload.get("country", "TW")
+
     # 驗證 authorized_users 不超過 50
     if len(body.authorized_users) > 50:
         raise HTTPException(status_code=400, detail="授權使用者不可超過 50 人")
@@ -104,13 +130,16 @@ async def update_agent_acl(
         "exception_list": body.exception_list,
     }
 
+    agent_name = agent_id
     async with GlobalSessionLocal() as session:
         # 檢查 Agent 是否存在
         agent_result = await session.execute(
             select(AgentMaster).where(AgentMaster.agent_id == agent_id)
         )
-        if not agent_result.scalar_one_or_none():
+        agent = agent_result.scalar_one_or_none()
+        if not agent:
             raise HTTPException(status_code=404, detail="Agent 不存在")
+        agent_name = agent.name
 
         # 更新或建立 ACL
         acl_result = await session.execute(
@@ -130,6 +159,19 @@ async def update_agent_acl(
 
         await session.commit()
 
+    audit_log(
+        action=AuditAction.AGENT_ACL_UPDATE,
+        operator_email=operator_email,
+        country_code=operator_country,
+        target=agent_id,
+        details={
+            "agent_name": agent_name,
+            "authorized_roles": body.authorized_roles,
+            "authorized_users_count": len(body.authorized_users),
+            "exception_list_count": len(body.exception_list),
+        },
+        request=request,
+    )
     return MessageResponse(message="Agent 授權規則已更新")
 
 
