@@ -129,9 +129,10 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 if STATIC_DIR.exists() and (STATIC_DIR / "index.html").exists():
     # 掛載靜態資源（CSS, JS, images 等）
+    # vite build 的 base 是 /AzureTest/，所以靜態資源路徑是 /AzureTest/assets/...
     assets_dir = STATIC_DIR / "assets"
     if assets_dir.exists():
-        app.mount("/assets", StaticFiles(directory=assets_dir), name="static-assets")
+        app.mount("/AzureTest/assets", StaticFiles(directory=assets_dir), name="static-assets")
 
     # SPA Fallback：所有非 /api 的請求都回傳 index.html
     @app.get("/{full_path:path}", tags=["前端"])

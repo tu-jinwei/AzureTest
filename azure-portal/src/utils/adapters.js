@@ -135,7 +135,7 @@ export function adaptAgent(apiData) {
     id: apiData.agent_id,
     name: apiData.name ?? '',
     model: configJson.model || 'unknown',
-    status: apiData.is_published ? '可用' : '不可用',
+    status: apiData.is_published ? 'available' : 'unavailable',
     icon: apiData.icon ?? '',
     color: apiData.color ?? '',
     description: apiData.description ?? '',

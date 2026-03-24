@@ -15,6 +15,7 @@ Agatha Public API 端點：
     → 如果 streaming 失敗，fallback 到非 streaming
     → SSE 回傳給前端 + 存入 Portal MongoDB
 """
+import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -22,7 +23,7 @@ from typing import List, Optional
 from uuid import UUID, uuid4
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
@@ -31,6 +32,7 @@ from core.database import GlobalSessionLocal
 from core.portal_mongo import get_sessions_collection, get_messages_collection
 from core.security import get_current_user_payload
 from services.pii_service import get_pii_service
+from utils.audit_logger import audit_log, AuditAction
 from models.global_models import AgentMaster
 from models.schemas import (
     ChatCreate,
@@ -188,6 +190,7 @@ def _sse_json(data: dict) -> str:
 
 @router.post("/stream")
 async def chat_stream(
+    request: Request,
     body: ChatStreamCreate,
     payload: dict = Depends(get_current_user_payload),
 ):
@@ -534,22 +537,49 @@ async def chat_stream(
                 logger.error(f"❌ 非 streaming 處理失敗: {e}")
                 yield _sse_json({"type": "error", "message": f"處理失敗: {str(e)}"})
 
-        # === 存入 Portal MongoDB ===
+        # === 存入 Portal MongoDB（用 asyncio.shield 保護，即使 SSE 連線中斷也能完成儲存）===
         if full_content:
             try:
-                final_session_id = await _save_to_portal(
-                    email=email,
-                    country=country,
-                    agent_id=body.agent_id,
-                    agent_name=agent_name,
-                    user_message=body.message,
-                    assistant_message=full_content,
-                    session_id=final_session_id,
-                    thread_id=final_thread_id,
-                    images=images if images else None,
+                saved_session_id = await asyncio.shield(
+                    _save_to_portal(
+                        email=email,
+                        country=country,
+                        agent_id=body.agent_id,
+                        agent_name=agent_name,
+                        user_message=body.message,
+                        assistant_message=full_content,
+                        session_id=final_session_id,
+                        thread_id=final_thread_id,
+                        images=images if images else None,
+                    )
                 )
+                final_session_id = saved_session_id
+            except asyncio.CancelledError:
+                # SSE 連線已中斷，但 asyncio.shield 會讓儲存繼續在背景完成
+                logger.info(f"ℹ️ SSE 連線已中斷，對話儲存在背景繼續執行")
+                return
             except Exception as e:
                 logger.warning(f"⚠️ 儲存對話到 Portal MongoDB 失敗（不影響回覆）: {e}")
+
+        # 記錄稽核日誌（直接 await，確保在 generator 內正確執行）
+        try:
+            from utils.audit_logger import _write_audit_log, _get_client_ip, _get_user_agent
+            await _write_audit_log(
+                action=AuditAction.CHAT_SEND,
+                operator_email=email,
+                country_code=country,
+                target=body.agent_id,
+                result="success",
+                details={
+                    "agent_name": agent_name,
+                    "session_id": final_session_id,
+                    "message_preview": body.message[:100],
+                },
+                ip_address=_get_client_ip(request),
+                user_agent=_get_user_agent(request),
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ 聊天稽核日誌寫入失敗: {e}")
 
         # 發送 complete 事件（帶 session_id）
         yield _sse_json({
@@ -845,6 +875,15 @@ async def delete_session(
     logger.info(
         f"🗑️ 對話已刪除: session_id={session_id}, "
         f"messages_deleted={delete_msgs.deleted_count}"
+    )
+
+    audit_log(
+        action=AuditAction.CHAT_SESSION_DELETE,
+        operator_email=email,
+        country_code=payload.get("country", "TW"),
+        target=session_id,
+        result="success",
+        details={"messages_deleted": delete_msgs.deleted_count},
     )
 
     return {"message": "對話已刪除"}
