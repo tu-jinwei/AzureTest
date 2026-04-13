@@ -13,6 +13,38 @@ export const useChat = () => {
   return context;
 };
 
+const AGENT_LAST_USED_KEY = 'agent_last_used';
+
+/** 讀取 localStorage 中的 agent 最近使用時間 map: { agentId: timestamp } */
+function loadAgentLastUsed() {
+  try {
+    return JSON.parse(localStorage.getItem(AGENT_LAST_USED_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+/** 更新某個 agent 的最近使用時間到 localStorage */
+function saveAgentLastUsed(agentId) {
+  try {
+    const map = loadAgentLastUsed();
+    map[agentId] = Date.now();
+    localStorage.setItem(AGENT_LAST_USED_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+/** 依最近使用時間排序 agents（最近使用的排最前面，未使用過的排最後） */
+function sortAgentsByLastUsed(agentList) {
+  const map = loadAgentLastUsed();
+  return [...agentList].sort((a, b) => {
+    const ta = map[a.id] || 0;
+    const tb = map[b.id] || 0;
+    return tb - ta;
+  });
+}
+
 export const ChatProvider = ({ children }) => {
   // ── Agent 列表 ──────────────────────────────────────────────
   const [agents, setAgents] = useState([]);
@@ -40,10 +72,10 @@ export const ChatProvider = ({ children }) => {
     const fetchAgents = async () => {
       try {
         const res = await agentAPI.list();
-        setAgents(adaptAgents(res.data));
+        setAgents(sortAgentsByLastUsed(adaptAgents(res.data)));
       } catch (err) {
         console.warn('Agent API 失敗，使用 mock 資料', err);
-        setAgents(mockAgents);
+        setAgents(sortAgentsByLastUsed(mockAgents));
       } finally {
         setAgentsLoading(false);
       }
@@ -301,6 +333,9 @@ export const ChatProvider = ({ children }) => {
             abortRef.current = null;
 
             if (selectedAgent) {
+              // 更新最近使用時間並重新排序 agents
+              saveAgentLastUsed(selectedAgent.id);
+              setAgents((prev) => sortAgentsByLastUsed(prev));
               fetchSessions(selectedAgent.id);
             }
           }

@@ -126,6 +126,12 @@ async def health_check():
 
 # === 前端靜態檔案 Serve ===
 STATIC_DIR = Path(__file__).parent / "static"
+UPLOADS_DIR = Path(__file__).parent / "uploads"
+
+# 掛載 uploads 目錄（頭像等使用者上傳檔案）
+if UPLOADS_DIR.exists():
+    app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
+    logger.info(f"📁 上傳檔案目錄: {UPLOADS_DIR}")
 
 if STATIC_DIR.exists() and (STATIC_DIR / "index.html").exists():
     # 掛載靜態資源（CSS, JS, images 等）

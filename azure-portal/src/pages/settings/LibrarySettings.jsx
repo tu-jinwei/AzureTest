@@ -46,7 +46,6 @@ const LibrarySettings = () => {
   const [addCatalogLoading, setAddCatalogLoading] = useState(false);
   const [modalCatalogs, setModalCatalogs] = useState([]);
   const [modalLibLoading, setModalLibLoading] = useState(false);
-  const [newLibraryName, setNewLibraryName] = useState('');
   const [editModal, setEditModal] = useState(null);
   const [editLoading, setEditLoading] = useState(false);
   const [editForm] = Form.useForm();
@@ -176,24 +175,8 @@ const LibrarySettings = () => {
     } finally { setAddCatalogLoading(false); }
   };
 
-  const handleAddNewLibrary = async () => {
-    const n = newLibraryName.trim();
-    if (!n) return;
-    if (modalCatalogs.some((c) => c.name === n)) { message.warning(t('librarySettings.libraryExists')); return; }
-    try {
-      await libraryAPI.createCatalog({ library_name: n }, isSuperAdmin ? form.getFieldValue('target_country') : undefined);
-      setModalCatalogs((p) => [...p, { catalogId: 'new-' + Date.now(), name: n, docCount: 0 }]);
-      form.setFieldsValue({ libraryName: n });
-      setNewLibraryName('');
-      message.success(t('librarySettings.libraryAdded', { name: n }));
-    } catch (e) {
-      message.error(t('librarySettings.addLibraryFailed') + ': ' + (e.response?.data?.detail || e.message));
-    }
-  };
-
   const handleOpenUpload = () => {
     form.resetFields();
-    setNewLibraryName('');
     if (isSuperAdmin) {
       form.setFieldsValue({ target_country: displayCountry });
       fetchModalLibraries(displayCountry);
@@ -543,9 +526,10 @@ const LibrarySettings = () => {
 
   const columns = [
     {
-      title: t('librarySettings.libraryName'), dataIndex: 'libraryName', key: 'libraryName', width: 160,
+      title: t('librarySettings.libraryName'), dataIndex: 'libraryName', key: 'libraryName', width: 220,
+      ellipsis: true,
       render: (name) => (
-        <Tag color="blue" style={{ cursor: 'pointer' }} onClick={() => setDocFilterLibrary(name)}>
+        <Tag color="blue" style={{ cursor: 'pointer', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={() => setDocFilterLibrary(name)}>
           <FolderOutlined style={{ marginRight: 4 }} />{name}
         </Tag>
       ),
@@ -817,7 +801,7 @@ const LibrarySettings = () => {
       <Modal
         title={t('librarySettings.uploadDocument')}
         open={uploadModal}
-        onCancel={() => { setUploadModal(false); form.resetFields(); setNewLibraryName(''); }}
+        onCancel={() => { setUploadModal(false); form.resetFields(); }}
         onOk={handleUpload}
         confirmLoading={uploadLoading}
         okText={piiScanning ? t('pii.scanningFiles') : t('common.upload')}
@@ -850,29 +834,6 @@ const LibrarySettings = () => {
               showSearch
               allowClear
               notFoundContent={modalLibLoading ? <Spin size="small" /> : t('librarySettings.noLibraryForCountry')}
-              dropdownRender={(menu) => (
-                <>
-                  {menu}
-                  <Divider style={{ margin: '8px 0' }} />
-                  <div style={{ display: 'flex', gap: 8, padding: '0 8px 8px' }}>
-                    <Input
-                      placeholder={t('librarySettings.newLibraryPlaceholder')}
-                      value={newLibraryName}
-                      onChange={(e) => setNewLibraryName(e.target.value)}
-                      onKeyDown={(e) => e.stopPropagation()}
-                      style={{ flex: 1 }}
-                    />
-                    <Button
-                      type="primary"
-                      icon={<FolderAddOutlined />}
-                      onClick={handleAddNewLibrary}
-                      style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
-                    >
-                      {t('librarySettings.addLibrary')}
-                    </Button>
-                  </div>
-                </>
-              )}
             />
           </Form.Item>
           <Form.Item name="name" label={t('librarySettings.documentName')} rules={[{ required: true, message: t('librarySettings.documentNameRequired') }]}>

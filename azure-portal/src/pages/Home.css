@@ -68,6 +68,11 @@
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.2s;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.announcement-item:last-of-type {
+  border-bottom: none;
 }
 
 .announcement-item:hover {
@@ -100,20 +105,61 @@
   padding: 8px 0;
 }
 
+/* 左右兩欄佈局 */
+.announcement-modal-body {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  min-height: 280px;
+}
+
+/* 左欄：日期 + 橫線 + 內文 */
+.announcement-modal-left {
+  flex: 3;
+  min-width: 0;
+}
+
+/* 右欄：附件檔案 + 圖書館文件 */
+.announcement-modal-right {
+  flex: 2;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 無附件提示 */
+.announcement-modal-no-attachment {
+  color: #999;
+  padding: '12px 0';
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .announcement-modal-date {
   font-size: 13px;
   color: var(--text-light);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   display: flex;
   align-items: center;
+}
+
+/* 標題與內文之間的橫線 */
+.announcement-modal-divider {
+  height: 1px;
+  background: var(--border-color, #e8e8e8);
+  margin: 8px 0 12px;
 }
 
 .announcement-modal-text {
   font-size: 14px;
   line-height: 1.8;
   color: var(--text-secondary);
-  margin-bottom: 20px;
-  min-height: 300px;
+  margin-bottom: 12px;
+  max-height: 200px;
+  overflow-y: auto;
   white-space: pre-wrap;
 }
 
@@ -150,6 +196,14 @@
   border-color: var(--primary-color);
 }
 
+/* 右欄垂直排列版本 */
+.announcement-cover-vertical {
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 12px;
+  gap: 10px;
+}
+
 .announcement-cover-info {
   display: flex;
   flex-direction: column;
@@ -174,22 +228,41 @@
   text-decoration: underline;
 }
 
-/* PDF 縮圖 */
-.announcement-thumbnail {
+/* PDF 縮圖：固定高度容器，以 fitContainer 控制縮圖 contain 縮放 */
+.announcement-thumbnail-wrapper {
+  width: 100%;
+  height: 220px;
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   transition: box-shadow 0.2s;
+  cursor: pointer;
+  background: #f5f5f5;
+  display: block;
+  overflow: hidden;
+  position: relative;
 }
 
-.announcement-thumbnail:hover {
+.announcement-thumbnail-wrapper:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+/* PDF 縮圖：填滿 wrapper，以 fitContainer 控制 contain 縮放 */
+.announcement-thumbnail {
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.announcement-thumbnail:hover {
+  box-shadow: none !important;
+}
+
 .announcement-thumbnail-loading {
-  width: 200px;
-  height: 140px;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -201,9 +274,15 @@
   font-size: 12px;
 }
 
+/* 右欄縮小版 loading/fallback */
+.announcement-thumbnail-sm {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 .announcement-thumbnail-fallback {
-  width: 200px;
-  height: 140px;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -267,8 +346,8 @@
 }
 
 .pdf-thumbnail-loading {
-  width: 200px;
-  height: 140px;
+  width: 280px;
+  height: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -277,8 +356,8 @@
 }
 
 .pdf-thumbnail-error {
-  width: 200px;
-  height: 140px;
+  width: 280px;
+  height: 160px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -374,7 +453,7 @@
 }
 
 .library-preview-card {
-  width: 200px;
+  width: 280px;
   cursor: pointer;
   transition: transform 0.2s;
 }
@@ -384,8 +463,8 @@
 }
 
 .library-preview-cover {
-  width: 200px;
-  height: 260px;
+  width: 280px;
+  height: 160px;
   background: #f5f5f5;
   border-radius: 8px;
   display: flex;
@@ -396,8 +475,8 @@
   color: #bbb;
   font-size: 14px;
   margin-bottom: 8px;
-  overflow: hidden;
   border: 1px solid #e8e8e8;
+  overflow: hidden;
 }
 
 .library-preview-cover .library-card-thumbnail {
@@ -406,13 +485,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  background: #f5f5f5;
 }
 
 .library-preview-cover .library-card-thumbnail canvas {
-  width: 200px !important;
-  height: auto !important;
+  height: 160px !important;
+  width: auto !important;
+  max-width: none !important;
   border-radius: 0;
+  display: block;
 }
 
 .library-preview-name {
@@ -422,7 +503,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
+  max-width: 280px;
 }
 
 .library-preview-lib-name {
@@ -432,7 +513,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
+  max-width: 280px;
 }
 
 /* ===== 大螢幕 scale up ===== */
@@ -491,27 +572,29 @@
     font-size: 13px;
   }
 
-  /* 圖書館預覽卡片 */
+  /* 圖書館預覽卡片（橫向） */
   .library-preview-card {
-    width: 240px;
+    width: 320px;
   }
 
   .library-preview-cover {
-    width: 240px;
-    height: 310px;
+    width: 320px;
+    height: 180px;
   }
 
   .library-preview-cover .library-card-thumbnail canvas {
-    width: 240px !important;
+    height: 180px !important;
+    width: auto !important;
+    max-width: none !important;
   }
 
   .library-preview-name {
     font-size: 14px;
-    max-width: 240px;
+    max-width: 320px;
   }
 
   .library-preview-lib-name {
     font-size: 13px;
-    max-width: 240px;
+    max-width: 320px;
   }
 }

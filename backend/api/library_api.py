@@ -38,15 +38,16 @@ router = APIRouter()
 def _resolve_country(payload: dict, query_country: Optional[str] = None) -> str:
     """
     解析要查詢的國家：
-    - root 可透過 query param 指定國家
+    - root / admin 可透過 query param 指定國家
     - 其他角色只能查自己的國家
     """
+    from core.permissions import is_cross_country_role
     user_country = payload.get("country", "TW")
     role = payload.get("role", "user")
 
     if query_country and query_country != user_country:
-        if role != "root":
-            raise HTTPException(status_code=403, detail="只有最高管理者可以跨國查看")
+        if not is_cross_country_role(role):
+            raise HTTPException(status_code=403, detail="只有管理者可以跨國查看")
         # 驗證國家是否存在
         if query_country not in settings.LOCAL_DB_CONFIG:
             raise HTTPException(status_code=400, detail=f"國家 [{query_country}] 不存在")
@@ -676,12 +677,13 @@ async def get_library_stats(
     user_country = payload.get("country", "")
 
     # 決定 country 篩選邏輯
-    # root：可指定 country，不指定則看所有國家（不加 country 篩選）
+    # root / admin：可指定 country，不指定則看所有國家（不加 country 篩選）
     # 其他角色：只能看自己的國家
-    if role == "root":
+    from core.permissions import is_cross_country_role
+    if is_cross_country_role(role):
         target_country = country  # 可能是 None（看全部）或指定國家
     else:
-        # 非 root：只能看自己的國家，忽略 country 參數
+        # 非管理者：只能看自己的國家，忽略 country 參數
         target_country = user_country or "TW"
 
     # 解析時間範圍
@@ -950,7 +952,8 @@ async def get_daily_detail(
     role = payload.get("role", "user")
     user_country = payload.get("country", "")
 
-    if role == "root":
+    from core.permissions import is_cross_country_role
+    if is_cross_country_role(role):
         target_country = country
     else:
         target_country = user_country or "TW"

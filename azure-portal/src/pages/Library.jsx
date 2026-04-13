@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Modal, Button, Pagination, Empty, Spin, message, Tag, List } from 'antd';
+import { Modal, Button, Empty, Spin, message, Tag, List } from 'antd';
 import {
   BookOutlined,
   FilePdfOutlined,
@@ -11,6 +11,7 @@ import {
   DownloadOutlined,
   EyeOutlined,
   LeftOutlined,
+  RightOutlined,
   FileOutlined,
   LoadingOutlined,
   PictureOutlined,
@@ -57,7 +58,10 @@ const getFileIcon = (filename) => {
   }
 };
 
-const DOCS_PER_PAGE = 5;
+// 館名卡片概覽每館最多載入幾張縮圖
+const CARD_THUMB_LIMIT = 10;
+// carousel 每頁顯示幾張縮圖
+const CAROUSEL_PAGE_SIZE = 2;
 
 /** 館封面圖片元件（需要 auth 的圖片載入） */
 const LibraryCoverImage = memo(({ catalogId, country }) => {
@@ -118,8 +122,11 @@ const Library = () => {
   const [loading, setLoading] = useState(true);
   const [selectedLibrary, setSelectedLibrary] = useState(null);
   const [selectedDoc, setSelectedDoc] = useState(null);
-  const [pageMap, setPageMap] = useState({});
 
+  // 館名卡片概覽用的縮圖 map: { docId: blobUrl }（頁面載入後背景載入）
+  const [cardThumbnails, setCardThumbnails] = useState({});
+  // carousel 頁碼 map: { libraryId: pageIndex }
+  const [carouselPage, setCarouselPage] = useState({});
   // 展開館名時，每個文件的 PDF 縮圖 blob URL map: { docId: blobUrl }
   const [docThumbnails, setDocThumbnails] = useState({});
 
@@ -146,8 +153,27 @@ const Library = () => {
         libraryAPI.listCatalogs(country).catch(() => ({ data: [] })),
       ]);
       const cats = adaptCatalogs(catRes.data);
-      const libs = adaptLibraryDocs(docsRes.data, cats.length > 0 ? cats : undefined);
+      const libs = adaptLibraryDocs(docsRes.data, cats.length > 0 ? cats : undefined)
+        .filter((lib) => lib.documents.length > 0);
       setLibraries(libs);
+
+      // 背景載入館名卡片概覽用的縮圖（每館前 CARD_THUMB_LIMIT 筆有 PDF 的文件）
+      setCardThumbnails({});
+      libs.forEach((lib) => {
+        lib.documents.slice(0, CARD_THUMB_LIMIT).forEach(async (doc) => {
+          const pdfFile = doc.files?.find((f) => isPdfFile(f.filename));
+          if (!pdfFile) return;
+          try {
+            const res = await libraryAPI.preview(doc.id, country, pdfFile.filename, false);
+            const blob = new Blob([res.data], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            setCardThumbnails((prev) => ({ ...prev, [doc.id]: url }));
+          } catch {
+            // 縮圖載入失敗不影響頁面
+          }
+        });
+      });
+
       return libs;
     } catch (err) {
       console.warn('圖書館 API 失敗，使用 mock 資料', err);
@@ -209,9 +235,6 @@ const Library = () => {
       }
     });
   }, [effectiveCountry]);
-
-  const getPage = (libId) => pageMap[libId] || 1;
-  const setPage = (libId, page) => setPageMap((prev) => ({ ...prev, [libId]: page }));
 
   // 載入 PDF blob URL（用於縮圖，不記錄稽核日誌）
   const loadThumbnail = useCallback(async (doc) => {
@@ -393,12 +416,7 @@ const Library = () => {
           {libraries.length === 0 && (
             <Empty description={t('libraryPage.noLibraryForCountry')} style={{ gridColumn: '1 / -1', padding: '40px 0' }} />
           )}
-          {libraries.map((lib) => {
-            const currentPage = getPage(lib.id);
-            const startIdx = (currentPage - 1) * DOCS_PER_PAGE;
-            const pagedDocs = lib.documents.slice(startIdx, startIdx + DOCS_PER_PAGE);
-
-            return (
+          {libraries.map((lib) => (
               <div key={lib.id} className="library-card">
                 {/* 卡片上半部 - 封面圖片 */}
                 <div
@@ -413,7 +431,7 @@ const Library = () => {
                     </div>
                   )}
                 </div>
-                {/* 館名 header（換頁不動） */}
+                {/* 館名 header */}
                 <div
                   className="library-card-header"
                   onClick={() => setSelectedLibrary(lib)}
@@ -422,39 +440,87 @@ const Library = () => {
                   <span className="library-card-name">{lib.name}</span>
                   <span className="library-card-count">({t('libraryPage.documentsCount', { count: lib.documents.length })})</span>
                 </div>
-                <div className="library-card-docs">
-                  {pagedDocs.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className="library-card-doc-item"
-                      onClick={() => handleDocClick(doc)}
-                    >
-                      {getFileIcon(doc.files?.[0]?.filename || doc.name)}
-                      <span style={{ marginRight: 8 }} />
-                      <span>{doc.name}</span>
-                      {doc.files?.length > 1 && (
-                        <Tag size="small" style={{ marginLeft: 6, fontSize: 11 }}>
-                          {t('libraryPage.filesCount', { count: doc.files.length })}
-                        </Tag>
+                {/* 下半部：PDF 縮圖 carousel */}
+                {(() => {
+                  const docs = lib.documents;
+                  const totalPages = Math.ceil(docs.length / CAROUSEL_PAGE_SIZE);
+                  const page = carouselPage[lib.id] || 0;
+                  const visibleDocs = docs.slice(page * CAROUSEL_PAGE_SIZE, (page + 1) * CAROUSEL_PAGE_SIZE);
+                  return (
+                    <div className="library-card-carousel">
+                      {/* 左箭頭 */}
+                      <button
+                        className="carousel-arrow carousel-arrow-left"
+                        disabled={page === 0}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCarouselPage((prev) => ({ ...prev, [lib.id]: page - 1 }));
+                        }}
+                      >
+                        <LeftOutlined />
+                      </button>
+
+                      {/* 縮圖區域 */}
+                      <div className="carousel-track">
+                        {visibleDocs.map((doc) => (
+                          <div
+                            key={doc.id}
+                            className="library-card-thumb-item"
+                            onClick={() => handleDocClick(doc)}
+                          >
+                            <div className="library-card-thumb-cover">
+                              {cardThumbnails[doc.id] ? (
+                                <PdfThumbnail
+                                  url={cardThumbnails[doc.id]}
+                                  fitHeight={120}
+                                  className="library-card-thumb-pdf"
+                                />
+                              ) : doc.files?.some((f) => isPdfFile(f.filename)) ? (
+                                <Spin indicator={<LoadingOutlined style={{ fontSize: 16 }} spin />} />
+                              ) : (
+                                React.cloneElement(
+                                  getFileIcon(doc.files?.[0]?.filename || doc.name),
+                                  { style: { fontSize: 28 } }
+                                )
+                              )}
+                            </div>
+                            <div className="library-card-thumb-name">{doc.name}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* 右箭頭 */}
+                      <button
+                        className="carousel-arrow carousel-arrow-right"
+                        disabled={page >= totalPages - 1}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCarouselPage((prev) => ({ ...prev, [lib.id]: page + 1 }));
+                        }}
+                      >
+                        <RightOutlined />
+                      </button>
+
+                      {/* 頁面指示點 */}
+                      {totalPages > 1 && (
+                        <div className="carousel-dots">
+                          {Array.from({ length: totalPages }, (_, i) => (
+                            <span
+                              key={i}
+                              className={`carousel-dot${i === page ? ' active' : ''}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCarouselPage((prev) => ({ ...prev, [lib.id]: i }));
+                              }}
+                            />
+                          ))}
+                        </div>
                       )}
                     </div>
-                  ))}
-                </div>
-                <div className="library-card-pagination">
-                  {lib.documents.length > DOCS_PER_PAGE && (
-                    <Pagination
-                      size="small"
-                      current={currentPage}
-                      total={lib.documents.length}
-                      pageSize={DOCS_PER_PAGE}
-                      onChange={(page) => setPage(lib.id, page)}
-                      showSizeChanger={false}
-                    />
-                  )}
-                </div>
+                  );
+                })()}
               </div>
-            );
-          })}
+          ))}
         </div>
       ) : (
         /* ===== 展開館名 - 卡片式文件（首頁風格：縮圖 + 檔名 + 簡介） ===== */
@@ -469,11 +535,11 @@ const Library = () => {
               >
                 <div className="library-doc-card-cover">
                   {docThumbnails[doc.id] ? (
-                    <PdfThumbnail
-                      url={docThumbnails[doc.id]}
-                      width={200}
-                      className="library-doc-card-thumbnail"
-                    />
+                      <PdfThumbnail
+                        url={docThumbnails[doc.id]}
+                        fitHeight={160}
+                        className="library-doc-card-thumbnail"
+                      />
                   ) : doc.files?.some((f) => isPdfFile(f.filename)) ? (
                     <>
                       <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
@@ -552,7 +618,7 @@ const Library = () => {
                     ) : thumbnailUrl ? (
                       <PdfThumbnail
                         url={thumbnailUrl}
-                        width={200}
+                        fitHeight={160}
                         onClick={() => handleOpenPreviewModal(selectedDoc)}
                         className="pdf-thumbnail"
                       />

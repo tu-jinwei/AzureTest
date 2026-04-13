@@ -35,4 +35,4 @@ fi
 
 # 啟動 FastAPI（同時 serve 前端靜態檔 + API）
 echo "[$(date)] 啟動 CTBC AI Portal (port 8079)..."
-exec python -m uvicorn main:app --host 0.0.0.0 --port 8079 --reload
+exec python -m uvicorn main:app --host 0.0.0.0 --port 8079 --workers 4

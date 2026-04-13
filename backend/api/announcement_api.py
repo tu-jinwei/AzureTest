@@ -33,15 +33,16 @@ router = APIRouter()
 def _resolve_country(payload: dict, query_country: Optional[str] = None) -> str:
     """
     解析要查詢的國家：
-    - root 可透過 query param 指定國家
+    - root / admin 可透過 query param 指定國家
     - 其他角色只能查自己的國家
     """
+    from core.permissions import is_cross_country_role
     user_country = payload.get("country", "TW")
     role = payload.get("role", "user")
 
     if query_country and query_country != user_country:
-        if role != "root":
-            raise HTTPException(status_code=403, detail="只有最高管理者可以跨國查看")
+        if not is_cross_country_role(role):
+            raise HTTPException(status_code=403, detail="只有管理者可以跨國查看")
         if query_country not in settings.LOCAL_DB_CONFIG:
             raise HTTPException(status_code=400, detail=f"國家 [{query_country}] 不存在")
         return query_country

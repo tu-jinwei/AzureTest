@@ -86,6 +86,8 @@ const Home = () => {
   const previewUrlRef = useRef(null);    // 用 ref 追蹤舊 URL，避免 useCallback 依賴 state
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewFilename, setPreviewFilename] = useState(null);
+  // 公告 Modal 寬度（用 ref 避免關閉動畫期間寬度跳動）
+  const announcementModalWidthRef = useRef(800);
   // 下載檔案彈窗
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   // 全部公告 Modal
@@ -97,68 +99,78 @@ const Home = () => {
   const ANNOUNCEMENTS_PER_PAGE = 4;
   const HOME_ANNOUNCEMENTS_LIMIT = 5;
 
-  const fetchData = async (country) => {
-    setLoading(true);
-
-    // 公告
-    try {
-      const res = await announcementAPI.list(country);
-      setAnnouncements(adaptAnnouncements(res.data));
-    } catch (err) {
-      console.warn('公告 API 失敗，使用 mock 資料', err);
-      setAnnouncements(mockAnnouncements);
-    }
-
-    // Agent（全球共用，不受國家影響）
-    try {
-      const res = await agentAPI.list();
-      setAgents(adaptAgents(res.data));
-    } catch (err) {
-      console.warn('Agent API 失敗，使用 mock 資料', err);
-      setAgents(mockAgents);
-    }
-
-    // 圖書館（最新 4 筆）
-    let docs = [];
-    try {
-      const res = await libraryAPI.latest(country, 4);
-      docs = adaptLibraryDocsFlat(res.data);
-      setLatestDocs(docs);
-    } catch (err) {
-      console.warn('圖書館 API 失敗，使用 mock 資料', err);
-      docs = mockLibraries[0]?.documents?.slice(0, 4) || [];
-      setLatestDocs(docs);
-    }
-
-    // 先結束 loading，讓頁面立即顯示
-    setLoading(false);
-
-    // 清理舊的 blob URL
-    setDocThumbnails((prev) => {
-      Object.values(prev).forEach((url) => URL.revokeObjectURL(url));
-      return {};
-    });
-
-    // 為有 PDF 檔案的文件載入縮圖（背景非同步，逐一更新）
-    docs.forEach(async (doc) => {
-      // 找到第一個 PDF 檔案
-      const pdfFile = doc.files?.find((f) =>
-        f.filename?.toLowerCase().endsWith('.pdf')
-      );
-      if (!pdfFile) return;
-      try {
-        const res = await libraryAPI.preview(doc.id, country, pdfFile.filename, false);
-        const blob = new Blob([res.data], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        setDocThumbnails((prev) => ({ ...prev, [doc.id]: url }));
-      } catch (err) {
-        console.warn(`文件 ${doc.id} PDF 縮圖載入失敗:`, err);
-      }
-    });
-  };
-
   useEffect(() => {
+    let cancelled = false;
+
+    const fetchData = async (country) => {
+      setLoading(true);
+
+      // 公告
+      try {
+        const res = await announcementAPI.list(country);
+        if (!cancelled) setAnnouncements(adaptAnnouncements(res.data));
+      } catch (err) {
+        console.warn('公告 API 失敗，使用 mock 資料', err);
+        if (!cancelled) setAnnouncements(mockAnnouncements);
+      }
+
+      // Agent（全球共用，不受國家影響）
+      try {
+        const res = await agentAPI.list();
+        if (!cancelled) setAgents(adaptAgents(res.data));
+      } catch (err) {
+        console.warn('Agent API 失敗，使用 mock 資料', err);
+        if (!cancelled) setAgents(mockAgents);
+      }
+
+      // 圖書館（最新 4 筆）
+      let docs = [];
+      try {
+        const res = await libraryAPI.latest(country, 4);
+        docs = adaptLibraryDocsFlat(res.data);
+        if (!cancelled) setLatestDocs(docs);
+      } catch (err) {
+        console.warn('圖書館 API 失敗，使用 mock 資料', err);
+        docs = mockLibraries[0]?.documents?.slice(0, 4) || [];
+        if (!cancelled) setLatestDocs(docs);
+      }
+
+      // 先結束 loading，讓頁面立即顯示
+      if (!cancelled) setLoading(false);
+
+      if (cancelled) return;
+
+      // 清理舊的 blob URL
+      setDocThumbnails((prev) => {
+        Object.values(prev).forEach((url) => URL.revokeObjectURL(url));
+        return {};
+      });
+
+      // 為有 PDF 檔案的文件載入縮圖（背景非同步，逐一更新）
+      docs.forEach(async (doc) => {
+        // 找到第一個 PDF 檔案
+        const pdfFile = doc.files?.find((f) =>
+          f.filename?.toLowerCase().endsWith('.pdf')
+        );
+        if (!pdfFile) return;
+        try {
+          const res = await libraryAPI.preview(doc.id, country, pdfFile.filename, false);
+          if (!cancelled) {
+            const blob = new Blob([res.data], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            setDocThumbnails((prev) => ({ ...prev, [doc.id]: url }));
+          }
+        } catch (err) {
+          console.warn(`文件 ${doc.id} PDF 縮圖載入失敗:`, err);
+        }
+      });
+    };
+
     fetchData(effectiveCountry);
+
+    return () => {
+      cancelled = true;
+    };
   }, [effectiveCountry]);
 
   // 載入 PDF blob URL（用於縮圖）
@@ -331,7 +343,10 @@ const Home = () => {
             <div
               key={item.id}
               className="announcement-item"
-              onClick={() => setSelectedAnnouncement(item)}
+              onClick={() => {
+                announcementModalWidthRef.current = (item.attachments?.length > 0 || item.libraryDocs?.length > 0) ? 800 : 480;
+                setSelectedAnnouncement(item);
+              }}
             >
               <span className="announcement-dot">•</span>
               {item.isNew && <Tag color="red" className="announcement-new-tag">NEW</Tag>}
@@ -380,178 +395,186 @@ const Home = () => {
             {t('common.close')}
           </Button>,
         ]}
-        width={640}
+        width={announcementModalWidthRef.current}
         centered
+        styles={{ body: { minHeight: 320 } }}
       >
         {selectedAnnouncement && (
           <div className="announcement-modal-content">
-            <div className="announcement-modal-date">
-              <CalendarOutlined style={{ marginRight: 6 }} />
-              {selectedAnnouncement.date}
-            </div>
-            <p className="announcement-modal-text">
-              {selectedAnnouncement.content}
-            </p>
+            <div className="announcement-modal-body">
+              {/* ── 左欄：日期 + 橫線 + 內文 ── */}
+              <div className="announcement-modal-left">
+                <div className="announcement-modal-date">
+                  <CalendarOutlined style={{ marginRight: 6 }} />
+                  {selectedAnnouncement.date}
+                </div>
+                <div className="announcement-modal-divider" />
+                <p className="announcement-modal-text">
+                  {selectedAnnouncement.content}
+                </p>
+              </div>
 
-            {/* 附件區域 */}
-            {selectedAnnouncement.attachments?.length > 0 ? (
-              <div className="announcement-modal-attachment-area">
-                {/* PDF 縮圖封面 */}
-                {selectedAnnouncement.attachments.some((a) => isPdfFile(a.name)) ? (
-                  <div className="announcement-cover">
-                    {thumbnailLoading ? (
-                      <div className="announcement-thumbnail-loading">
-                        <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
-                        <span>{t('home.loadingPreview')}</span>
+              {/* ── 右欄：附件檔案 + 圖書館文件（無附件且無圖書館文件時隱藏整個右欄） ── */}
+              {(selectedAnnouncement.attachments?.length > 0 || selectedAnnouncement.libraryDocs?.length > 0) && (
+              <div className="announcement-modal-right">
+                {/* 附件檔案 */}
+                {selectedAnnouncement.attachments?.length > 0 ? (
+                  <div className="announcement-modal-attachment-area">
+                    {selectedAnnouncement.attachments.some((a) => isPdfFile(a.name)) ? (
+                      <div className="announcement-cover announcement-cover-vertical">
+                        {/* 橫向固定比例容器 */}
+                        <div
+                          className="announcement-thumbnail-wrapper"
+                          onClick={() => handleOpenPreviewModal(selectedAnnouncement)}
+                        >
+                          {thumbnailLoading ? (
+                            <div className="announcement-thumbnail-loading announcement-thumbnail-sm">
+                              <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
+                              <span>{t('home.loadingPreview')}</span>
+                            </div>
+                          ) : thumbnailUrl ? (
+                            <PdfThumbnail
+                              url={thumbnailUrl}
+                              fitContainer
+                              className="announcement-thumbnail"
+                            />
+                          ) : (
+                            <div className="announcement-thumbnail-fallback announcement-thumbnail-sm">
+                              <FilePdfOutlined style={{ fontSize: 48, color: '#e74c3c' }} />
+                            </div>
+                          )}
+                        </div>
+                        <div className="announcement-cover-info">
+                          <span className="announcement-cover-filename">
+                            {selectedAnnouncement.attachments[0]?.name}
+                          </span>
+                          {selectedAnnouncement.attachments.length > 1 && (
+                            <Tag color="blue" style={{ marginTop: 4 }}>
+                              {t('home.totalAttachments', { count: selectedAnnouncement.attachments.length })}
+                            </Tag>
+                          )}
+                          <span
+                            className="announcement-cover-hint"
+                            onClick={() => handleOpenPreviewModal(selectedAnnouncement)}
+                          >
+                            <EyeOutlined style={{ marginRight: 4 }} />
+                            {t('home.clickPreviewPdf')}
+                          </span>
+                        </div>
                       </div>
-                    ) : thumbnailUrl ? (
-                      <PdfThumbnail
-                        url={thumbnailUrl}
-                        width={200}
-                        onClick={() => handleOpenPreviewModal(selectedAnnouncement)}
-                        className="announcement-thumbnail"
-                      />
                     ) : (
-                      <div className="announcement-thumbnail-fallback">
-                        <FilePdfOutlined style={{ fontSize: 48, color: '#e74c3c' }} />
+                      <div className="announcement-cover announcement-cover-vertical" style={{ cursor: 'default' }}>
+                        {React.cloneElement(
+                          getFileIcon(selectedAnnouncement.attachments[0]?.name),
+                          { style: { fontSize: 48 } }
+                        )}
+                        <div className="announcement-cover-info">
+                          <span className="announcement-cover-filename">
+                            {selectedAnnouncement.attachments[0]?.name}
+                          </span>
+                          {selectedAnnouncement.attachments.length > 1 && (
+                            <Tag color="blue" style={{ marginTop: 4 }}>
+                              {t('home.totalAttachments', { count: selectedAnnouncement.attachments.length })}
+                            </Tag>
+                          )}
+                          <span className="announcement-cover-hint" style={{ color: '#999' }}>
+                            {t('home.formatNotSupported')}
+                          </span>
+                        </div>
                       </div>
                     )}
-                    <div className="announcement-cover-info">
-                      <span className="announcement-cover-filename">
-                        {selectedAnnouncement.attachments[0]?.name}
-                      </span>
-                      {selectedAnnouncement.attachments.length > 1 && (
-                        <Tag color="blue" style={{ marginTop: 4 }}>
-                          {t('home.totalAttachments', { count: selectedAnnouncement.attachments.length })}
-                        </Tag>
-                      )}
-                      <span
-                        className="announcement-cover-hint"
-                        onClick={() => handleOpenPreviewModal(selectedAnnouncement)}
-                      >
-                        <EyeOutlined style={{ marginRight: 4 }} />
-                        {t('home.clickPreviewPdf')}
-                      </span>
-                    </div>
                   </div>
-                ) : (
-                  /* 非 PDF 附件：顯示檔案圖示 */
-                  <div className="announcement-cover" style={{ cursor: 'default' }}>
-                    {React.cloneElement(
-                      getFileIcon(selectedAnnouncement.attachments[0]?.name),
-                      { style: { fontSize: 48 } }
-                    )}
-                    <div className="announcement-cover-info">
-                      <span className="announcement-cover-filename">
-                        {selectedAnnouncement.attachments[0]?.name}
-                      </span>
-                      {selectedAnnouncement.attachments.length > 1 && (
-                        <Tag color="blue" style={{ marginTop: 4 }}>
-                          {t('home.totalAttachments', { count: selectedAnnouncement.attachments.length })}
-                        </Tag>
-                      )}
-                      <span className="announcement-cover-hint" style={{ color: '#999' }}>
-                        {t('home.formatNotSupported')}
-                      </span>
+                ) : null}
+
+                {/* 圖書館文件 */}
+                {selectedAnnouncement.libraryDocs?.length > 0 && (
+                  <div style={{ marginTop: 12, padding: '10px 12px', background: '#f6f0ff', borderRadius: 8, border: '1px solid #d3adf7' }}>
+                    <div style={{ fontWeight: 500, marginBottom: 8, color: '#722ed1', fontSize: 13 }}>
+                      <BookOutlined style={{ marginRight: 6 }} />
+                      {t('home.relatedLibraryDocs')}
                     </div>
+                    {selectedAnnouncement.libraryDocs.map((doc) => (
+                      <div
+                        key={doc.docId}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '5px 8px',
+                          marginBottom: 4,
+                          background: '#fff',
+                          borderRadius: 4,
+                          fontSize: 12,
+                        }}
+                      >
+                        <span
+                          style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                          onClick={() => {
+                            handleCloseAnnouncement();
+                            navigate(`/library?doc=${doc.docId}`);
+                          }}
+                        >
+                          <BookOutlined style={{ marginRight: 4, color: '#722ed1' }} />
+                          <span style={{ fontWeight: 500 }}>{doc.name}</span>
+                          {doc.libraryName && (
+                            <span style={{ color: '#999', marginLeft: 6, fontSize: 11 }}>({doc.libraryName})</span>
+                          )}
+                        </span>
+                        <Space size={2}>
+                          <Button
+                            type="link"
+                            size="small"
+                            icon={<DownloadOutlined />}
+                            style={{ color: '#722ed1', padding: 0, fontSize: 12 }}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                const res = await libraryAPI.download(doc.docId, effectiveCountry);
+                                let downloadName = doc.name || 'document';
+                                const disposition = res.headers['content-disposition'];
+                                if (disposition) {
+                                  const utf8Match = disposition.match(/filename\*=utf-8''(.+)/i);
+                                  const plainMatch = disposition.match(/filename="?([^";\n]+)"?/i);
+                                  if (utf8Match) downloadName = decodeURIComponent(utf8Match[1]);
+                                  else if (plainMatch) downloadName = plainMatch[1];
+                                }
+                                const blob = new Blob([res.data]);
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = downloadName;
+                                document.body.appendChild(a);
+                                a.click();
+                                window.URL.revokeObjectURL(url);
+                                document.body.removeChild(a);
+                              } catch (err) {
+                                message.error(t('home.downloadFailed') + '：' + (err.response?.data?.detail || err.message));
+                              }
+                            }}
+                          >
+                            {t('home.downloadLibraryDoc')}
+                          </Button>
+                          <Button
+                            type="link"
+                            size="small"
+                            icon={<LinkOutlined />}
+                            style={{ color: '#999', padding: 0, fontSize: 12 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCloseAnnouncement();
+                              navigate(`/library?doc=${doc.docId}`);
+                            }}
+                          >
+                            {t('home.viewInLibrary')}
+                          </Button>
+                        </Space>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="announcement-modal-attachment">
-                <div style={{ color: '#999', padding: '12px 0' }}>
-                  <PaperClipOutlined style={{ marginRight: 4 }} />
-                  {t('home.noAttachment')}
-                </div>
-              </div>
-            )}
-
-            {/* 圖書館文件附件 */}
-            {selectedAnnouncement.libraryDocs?.length > 0 && (
-              <div style={{ marginTop: 16, padding: '12px 16px', background: '#f6f0ff', borderRadius: 8, border: '1px solid #d3adf7' }}>
-                <div style={{ fontWeight: 500, marginBottom: 8, color: '#722ed1' }}>
-                  <BookOutlined style={{ marginRight: 6 }} />
-                  {t('home.relatedLibraryDocs')}
-                </div>
-                {selectedAnnouncement.libraryDocs.map((doc) => (
-                  <div
-                    key={doc.docId}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '6px 10px',
-                      marginBottom: 4,
-                      background: '#fff',
-                      borderRadius: 4,
-                      fontSize: 13,
-                    }}
-                  >
-                    <span
-                      style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
-                      onClick={() => {
-                        handleCloseAnnouncement();
-                        navigate(`/library?doc=${doc.docId}`);
-                      }}
-                    >
-                      <BookOutlined style={{ marginRight: 6, color: '#722ed1' }} />
-                      <span style={{ fontWeight: 500 }}>{doc.name}</span>
-                      {doc.libraryName && (
-                        <span style={{ color: '#999', marginLeft: 8, fontSize: 12 }}>({doc.libraryName})</span>
-                      )}
-                    </span>
-                    <Space size={4}>
-                      <Button
-                        type="link"
-                        size="small"
-                        icon={<DownloadOutlined />}
-                        style={{ color: '#722ed1', padding: 0 }}
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          try {
-                            const res = await libraryAPI.download(doc.docId, effectiveCountry);
-                            let downloadName = doc.name || 'document';
-                            const disposition = res.headers['content-disposition'];
-                            if (disposition) {
-                              const utf8Match = disposition.match(/filename\*=utf-8''(.+)/i);
-                              const plainMatch = disposition.match(/filename="?([^";\n]+)"?/i);
-                              if (utf8Match) downloadName = decodeURIComponent(utf8Match[1]);
-                              else if (plainMatch) downloadName = plainMatch[1];
-                            }
-                            const blob = new Blob([res.data]);
-                            const url = window.URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = downloadName;
-                            document.body.appendChild(a);
-                            a.click();
-                            window.URL.revokeObjectURL(url);
-                            document.body.removeChild(a);
-                          } catch (err) {
-                            message.error(t('home.downloadFailed') + '：' + (err.response?.data?.detail || err.message));
-                          }
-                        }}
-                      >
-                        {t('home.downloadLibraryDoc')}
-                      </Button>
-                      <Button
-                        type="link"
-                        size="small"
-                        icon={<LinkOutlined />}
-                        style={{ color: '#999', padding: 0 }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCloseAnnouncement();
-                          navigate(`/library?doc=${doc.docId}`);
-                        }}
-                      >
-                        {t('home.viewInLibrary')}
-                      </Button>
-                    </Space>
-                  </div>
-                ))}
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
       </Modal>
@@ -624,7 +647,7 @@ const Home = () => {
             {t('common.close')}
           </Button>,
         ]}
-        width={480}
+        width={800}
         centered
       >
         <List
@@ -661,7 +684,7 @@ const Home = () => {
             {t('common.close')}
           </Button>,
         ]}
-        width={700}
+        width={800}
         centered
         styles={{ body: { overflow: 'hidden' } }}
         wrapClassName="no-scroll-modal"
@@ -696,25 +719,36 @@ const Home = () => {
                   renderItem={(item) => (
                     <List.Item
                       className="all-announcement-item"
-                      onClick={() => { setAllAnnouncementsModal(false); setSelectedAnnouncement(item); }}
+                      onClick={() => {
+                        setAllAnnouncementsModal(false);
+                        announcementModalWidthRef.current = (item.attachments?.length > 0 || item.libraryDocs?.length > 0) ? 800 : 480;
+                        setSelectedAnnouncement(item);
+                      }}
                       style={{ cursor: 'pointer', padding: '8px 16px', borderRadius: 6 }}
                     >
-                      <List.Item.Meta
-                        title={
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            {item.isNew && <Tag color="red" style={{ fontSize: 11 }}>NEW</Tag>}
-                            <span>{item.subject}</span>
+                      <div style={{ width: '100%' }}>
+                        {/* 第一行：標題 + 迴紋針數量（緊鄰標題）+ 時間（最右） */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          {item.isNew && <Tag color="red" style={{ fontSize: 12, flexShrink: 0 }}>NEW</Tag>}
+                          <span style={{ fontWeight: 600, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {item.subject}
                           </span>
-                        }
-                        description={
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span>{item.date}</span>
-                            {item.attachments?.length > 0 && (
-                              <span><PaperClipOutlined /> {item.attachments.length}</span>
-                            )}
-                          </span>
-                        }
-                      />
+                          {item.attachments?.length > 0 && (
+                            <span style={{ color: '#999', fontSize: 14, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2 }}>
+                              <PaperClipOutlined />
+                              <span>{item.attachments.length}</span>
+                            </span>
+                          )}
+                          <span style={{ flex: 1 }} />
+                          <span style={{ color: '#999', fontSize: 13, flexShrink: 0 }}>{item.date}</span>
+                        </div>
+                        {/* 第二行：內文預覽（超過 35 字元截斷） */}
+                        {item.content && (
+                          <div style={{ color: '#888', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                            {item.content.length > 50 ? item.content.slice(0, 50) + '...' : item.content}
+                          </div>
+                        )}
+                      </div>
                     </List.Item>
                   )}
                 />
@@ -755,7 +789,6 @@ const Home = () => {
                 <div className="agent-preview-name">{agent.name}</div>
                 <div className="agent-preview-meta">
                   <span className="agent-model">{agent.model}</span>
-                  <Tag color="green" style={{ marginLeft: 8 }}>{t(`agentStore.status_${agent.status}`)}</Tag>
                 </div>
               </div>
               <Button
@@ -789,7 +822,7 @@ const Home = () => {
                 {docThumbnails[doc.id] ? (
                   <PdfThumbnail
                     url={docThumbnails[doc.id]}
-                    width={200}
+                    fitHeight={160}
                     className="library-card-thumbnail"
                   />
                 ) : doc.files?.some((f) => f.filename?.toLowerCase().endsWith('.pdf')) ? (

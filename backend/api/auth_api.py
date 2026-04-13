@@ -216,6 +216,7 @@ async def verify_otp_endpoint(body: OTPVerify, request: Request):
             department=user.department,
             country=country,
             permissions=permissions,
+            avatar_url=user.avatar_url if user.avatar_url else None,
         ),
     )
 

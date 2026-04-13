@@ -60,7 +60,7 @@ async def list_all_agents(
     """取得所有 Agent（管理用，含未上架），包含 ACL 資訊"""
     async with GlobalSessionLocal() as session:
         result = await session.execute(
-            select(AgentMaster).order_by(AgentMaster.created_at.desc())
+            select(AgentMaster).order_by(AgentMaster.created_at.asc(), AgentMaster.agent_id.asc())
         )
         agents = result.scalars().all()
 
@@ -199,6 +199,7 @@ def _agent_to_response(agent: AgentMaster, acl_data: dict = None) -> AgentRespon
         description=agent.description,
         is_published=agent.is_published,
         acl=acl_info,
+        created_at=agent.created_at,
     )
 
 

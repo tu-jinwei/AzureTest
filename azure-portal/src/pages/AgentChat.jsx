@@ -539,12 +539,6 @@ const AgentChat = () => {
                   <div className="agent-panel-name">{agent.name}</div>
                   <div className="agent-panel-meta">
                     <span>{agent.model}</span>
-                    <Tag
-                      color="green"
-                      style={{ marginLeft: 6, fontSize: 11 }}
-                    >
-                      {t(`agentStore.status_${agent.status}`)}
-                    </Tag>
                   </div>
                 </div>
                 <Button

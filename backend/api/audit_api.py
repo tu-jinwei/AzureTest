@@ -12,6 +12,7 @@ import io
 import logging
 from datetime import datetime, timezone
 from typing import List, Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -235,6 +236,7 @@ async def export_audit_logs(
     target: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    tz_name: Optional[str] = Query(None, description="使用者時區名稱（例如 Asia/Taipei），用於 CSV 時間轉換"),
     payload: dict = Depends(require_permission("cross_country_logs")),
 ):
     """
@@ -286,19 +288,38 @@ async def export_audit_logs(
         )
         logs = logs_result.scalars().all()
 
+    # 解析使用者時區（若無效則 fallback 為 UTC）
+    user_tz = timezone.utc
+    tz_label = "UTC"
+    if tz_name:
+        try:
+            user_tz = ZoneInfo(tz_name)
+            tz_label = tz_name
+        except (KeyError, Exception):
+            logger.warning(f"無效的時區名稱：{tz_name}，使用 UTC")
+
     # 產生 CSV（使用 utf-8-sig 編碼，讓 Excel 正確識別中文）
     str_buf = io.StringIO()
     writer = csv.writer(str_buf)
 
-    # 標題列
+    # 標題列（標註時區）
     writer.writerow([
-        "時間", "使用者", "操作類型", "操作對象", "國家",
+        f"時間 ({tz_label})", "使用者", "操作類型", "操作對象", "國家",
         "結果", "IP 位址", "失敗原因", "補充資訊", "回應時間(ms)"
     ])
 
     for log in logs:
+        # 將 UTC 時間轉換為使用者時區
+        ts_str = ""
+        if log.timestamp:
+            ts = log.timestamp
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            ts_local = ts.astimezone(user_tz)
+            ts_str = ts_local.strftime("%Y-%m-%d %H:%M:%S")
+
         writer.writerow([
-            log.timestamp.strftime("%Y-%m-%d %H:%M:%S") if log.timestamp else "",
+            ts_str,
             log.user_email or "",
             log.action or "",
             log.target or "",

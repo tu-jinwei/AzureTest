@@ -94,11 +94,13 @@ export const AuthProvider = ({ children }) => {
     };
   }, [fetchUser]);
 
-  // 登入：儲存 token 並設定使用者
+  // 登入：儲存 token 並設定使用者，然後立即從 /me 取得完整資料（含 avatar_url）
   const login = useCallback((token, userData) => {
     setToken(token);
     setUser(userData);
-  }, []);
+    // 立即從後端取得完整使用者資訊（確保 avatar_url 等欄位完整）
+    setTimeout(() => fetchUser(), 100);
+  }, [fetchUser]);
 
   // 登出：清除 token 和使用者狀態
   const logout = useCallback(async () => {

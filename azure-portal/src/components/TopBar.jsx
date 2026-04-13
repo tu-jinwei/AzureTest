@@ -1,5 +1,5 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   MenuOutlined,
   UserOutlined,
@@ -50,11 +50,30 @@ const fetchAvatarBlobUrl = async () => {
   }
 };
 
+// 需要國家選擇器的路由前綴（這些頁面使用 effectiveCountry 來篩選資料）
+const COUNTRY_SELECTOR_ROUTES = [
+  '/',                          // Home
+  '/library',                   // Library
+  '/settings/announcements',    // AnnouncementSettings
+  '/settings/library',          // LibrarySettings
+  '/settings/usage-stats',      // UsageStats
+];
+
 const TopBar = ({ onToggleSidebar }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout, updateProfile, uploadAvatar, deleteAvatar } = useAuth();
   const { countries, selectedCountry, displayCountry, isSuperAdmin, setSelectedCountry } = useCountry();
   const { t, language, setLanguage } = useLanguage();
+
+  // 判斷當前頁面是否需要國家選擇器
+  const showCountrySelector = useMemo(() => {
+    if (!isSuperAdmin) return false;
+    const path = location.pathname;
+    return COUNTRY_SELECTOR_ROUTES.some((route) =>
+      route === '/' ? path === '/' : path.startsWith(route)
+    );
+  }, [isSuperAdmin, location.pathname]);
 
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -272,8 +291,8 @@ const TopBar = ({ onToggleSidebar }) => {
       <div className="topbar-right">
         {user && (
           <>
-            {/* 國家選擇（root / admin 可切換） */}
-            {isSuperAdmin ? (
+            {/* 國家選擇（root / admin 在有用到國家資料的頁面可切換） */}
+            {showCountrySelector ? (
               <Select
                 value={selectedCountry}
                 onChange={setSelectedCountry}

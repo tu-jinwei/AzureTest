@@ -313,6 +313,12 @@ export function adaptLibraryDocsFlat(apiDataList) {
 export function adaptUser(apiData) {
   if (!apiData) return null;
 
+  // 將相對路徑轉為絕對路徑（e.g. "uploads/avatars/xxx.gif" → "/uploads/avatars/xxx.gif"）
+  const rawAvatar = apiData.avatar_url ?? null;
+  const avatarUrl = rawAvatar
+    ? rawAvatar.startsWith('http') ? rawAvatar : `/${rawAvatar}`
+    : null;
+
   return {
     id: apiData.email, // 後端以 email 作為 PK
     name: apiData.name ?? '',
@@ -321,6 +327,7 @@ export function adaptUser(apiData) {
     role: apiData.role ?? '',
     country: apiData.country ?? '',
     status: apiData.status ?? 'active',
+    avatar_url: avatarUrl,
   };
 }
 

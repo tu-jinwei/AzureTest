@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Card, Row, Col, Statistic, Table, Select, DatePicker, Button,
+  Card, Row, Col, Statistic, Table, DatePicker, Button,
   Spin, Empty, Tag, Space, Progress, Typography, Segmented, Modal,
 } from 'antd';
 import {
@@ -792,11 +792,10 @@ const LibraryStatsTab = ({ dateRange, selectedCountry, isSuperAdmin, displayCoun
 // 主頁面：UsageStats（統計報表）
 // ============================================================
 const UsageStats = () => {
-  const { effectiveCountry, isSuperAdmin, countries, displayCountry } = useCountry();
+  const { effectiveCountry, isSuperAdmin, countries, displayCountry, selectedCountry } = useCountry();
   const { t } = useLanguage();
 
   const [dateRange, setDateRange] = useState(null);
-  const [selectedCountry, setSelectedCountry] = useState(null);
   const [mainTab, setMainTab] = useState('agent');
 
   return (
@@ -811,15 +810,6 @@ const UsageStats = () => {
       {/* 全域篩選列 */}
       <Card style={{ marginBottom: 16 }} bodyStyle={{ padding: '12px 16px' }}>
         <Space wrap>
-          {isSuperAdmin && (
-            <Select
-              placeholder="選擇國家"
-              value={selectedCountry || displayCountry}
-              onChange={setSelectedCountry}
-              style={{ minWidth: 140 }}
-              options={countries.map((c) => ({ value: c.code, label: `${c.name} (${c.code})` }))}
-            />
-          )}
           <RangePicker
             value={dateRange}
             onChange={setDateRange}

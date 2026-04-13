@@ -175,6 +175,8 @@ const AuditLogs = () => {
       if (filterTarget.trim()) params.target = filterTarget.trim();
       if (filterDateRange?.[0]) params.date_from = filterDateRange[0].toISOString();
       if (filterDateRange?.[1]) params.date_to = filterDateRange[1].toISOString();
+      // 傳送使用者時區，讓後端在 CSV 中顯示本地時間
+      params.tz_name = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
       const res = await auditAPI.export(params);
       const url = window.URL.createObjectURL(new Blob([res.data]));

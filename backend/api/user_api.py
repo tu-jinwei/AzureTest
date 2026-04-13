@@ -3,10 +3,12 @@
 國家隔離：非 root 只能看到/操作自己國家的使用者
 """
 import logging
+import mimetypes
 from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from sqlalchemy import select, update, delete, func
 
 from config import settings
@@ -27,6 +29,7 @@ from models.schemas import (
     UserStatusUpdate,
     UserUpdate,
 )
+from services.storage_service import storage_service
 from utils.audit_logger import audit_log, AuditAction
 
 logger = logging.getLogger(__name__)
@@ -106,6 +109,7 @@ async def list_users(
             status=u.status,
             last_login_at=u.last_login_at,
             created_at=u.created_at,
+            avatar_url=u.avatar_url,
         )
         for u in users
     ]
@@ -192,8 +196,9 @@ async def update_user(
         if not target:
             raise HTTPException(status_code=404, detail="使用者不存在")
 
-        # 國家隔離：非 root 不能編輯其他國家的使用者
-        if operator_role != "root" and target.country_code != operator_country:
+        # 國家隔離：非 root/admin 不能編輯其他國家的使用者
+        from core.permissions import is_cross_country_role
+        if not is_cross_country_role(operator_role) and target.country_code != operator_country:
             raise HTTPException(status_code=403, detail="權限不足：無法編輯其他國家的使用者")
 
         # 階層檢查：不能編輯自己、不能編輯等級 >= 自己的使用者
@@ -271,8 +276,9 @@ async def update_user_status(
         if not target:
             raise HTTPException(status_code=404, detail="使用者不存在")
 
-        # 國家隔離：非 root 不能操作其他國家的使用者
-        if operator_role != "root" and target.country_code != operator_country:
+        # 國家隔離：非 root/admin 不能操作其他國家的使用者
+        from core.permissions import is_cross_country_role
+        if not is_cross_country_role(operator_role) and target.country_code != operator_country:
             raise HTTPException(status_code=403, detail="權限不足：無法操作其他國家的使用者")
 
         # 階層檢查：不能停用自己、不能停用等級 >= 自己的使用者
@@ -330,8 +336,9 @@ async def update_user_role(
         if not target:
             raise HTTPException(status_code=404, detail="使用者不存在")
 
-        # 國家隔離：非 root 不能操作其他國家的使用者
-        if operator_role != "root" and target.country_code != operator_country:
+        # 國家隔離：非 root/admin 不能操作其他國家的使用者
+        from core.permissions import is_cross_country_role
+        if not is_cross_country_role(operator_role) and target.country_code != operator_country:
             raise HTTPException(status_code=403, detail="權限不足：無法操作其他國家的使用者")
 
         # 階層檢查：不能改自己、不能改等級 >= 自己的人、不能指派 >= 自己的角色
@@ -385,8 +392,9 @@ async def delete_user(
         if not target:
             raise HTTPException(status_code=404, detail="使用者不存在")
 
-        # 國家隔離：非 root 不能刪除其他國家的使用者
-        if operator_role != "root" and target.country_code != operator_country:
+        # 國家隔離：非 root/admin 不能刪除其他國家的使用者
+        from core.permissions import is_cross_country_role
+        if not is_cross_country_role(operator_role) and target.country_code != operator_country:
             raise HTTPException(status_code=403, detail="權限不足：無法刪除其他國家的使用者")
 
         # 階層檢查：不能刪自己、不能刪等級 >= 自己的使用者
@@ -431,3 +439,17 @@ async def delete_user(
         request=request,
     )
     return MessageResponse(message="使用者已永久刪除", detail=email)
+
+
+@router.get("/{email}/avatar")
+async def get_user_avatar(
+    email: str,
+    payload: dict = Depends(require_permission("manage_users")),
+):
+    """取得指定使用者的頭貼（管理員專用，回傳圖片 blob）"""
+    file_path = storage_service.get_avatar_path(email.lower())
+    if not file_path:
+        raise HTTPException(status_code=404, detail="該使用者尚未上傳頭貼")
+
+    media_type = mimetypes.guess_type(str(file_path))[0] or "image/jpeg"
+    return FileResponse(path=str(file_path), media_type=media_type)

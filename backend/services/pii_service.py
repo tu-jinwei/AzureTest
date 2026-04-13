@@ -67,7 +67,7 @@ class PIIScanResult:
 # ============================================================
 
 # 台灣身分證字號驗證
-_TW_ID_PATTERN = re.compile(r'[A-Z][12]\d{8}')
+_TW_ID_PATTERN = re.compile(r'[A-Za-z][12]\d{8}')
 
 # 台灣身分證字號驗證碼計算用的對照表
 _TW_ID_LETTER_MAP = {
@@ -213,7 +213,7 @@ class PIIService:
             patterns=[
                 Pattern(
                     name="tw_id",
-                    regex=r'[A-Z][12]\d{8}',
+                    regex=r'[A-Za-z][12]\d{8}',
                     score=0.7,
                 ),
             ],

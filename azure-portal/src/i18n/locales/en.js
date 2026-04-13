@@ -144,7 +144,7 @@ const en = {
     sendMessage: 'Send message to {name}...',
     selectAgentPlaceholder: 'Please select an agent',
     loadingAgents: 'Loading Agent list...',
-    availableAgents: 'Active Agents?',
+    availableAgents: 'Active Agents',
     newChat: 'New Chat',
     multiTurn: 'Multi-turn',
     stop: 'Stop',

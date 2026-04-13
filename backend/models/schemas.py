@@ -70,6 +70,7 @@ class UserListResponse(BaseModel):
     status: str
     last_login_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
+    avatar_url: Optional[str] = None
 
 
 # ===== Agent =====
@@ -89,6 +90,7 @@ class AgentResponse(BaseModel):
     description: Optional[str] = None
     is_published: bool = False
     acl: Optional[AgentACLInfo] = None
+    created_at: Optional[datetime] = None
 
 
 class AgentPublishUpdate(BaseModel):

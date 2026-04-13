@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Table,
   Button,
@@ -11,6 +11,7 @@ import {
   message,
   Space,
   Tooltip,
+  Avatar,
 } from 'antd';
 import {
   PlusOutlined,
@@ -20,8 +21,9 @@ import {
   SearchOutlined,
   LockOutlined,
   DeleteOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
-import { userAPI } from '../../services/api';
+import { userAPI, BASE_PREFIX, getToken } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCountry } from '../../contexts/CountryContext';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -36,12 +38,70 @@ import {
 } from '../../data/mockData';
 import '../Settings.css';
 
+/**
+ * 單一使用者頭像元件：有 avatar_url 就 fetch blob 顯示，否則顯示文字頭像
+ */
+const UserAvatar = ({ email, name, role, hasAvatar }) => {
+  const [blobUrl, setBlobUrl] = useState(null);
+
+  useEffect(() => {
+    if (!hasAvatar) return;
+    let objectUrl = null;
+    const token = getToken();
+    fetch(`${BASE_PREFIX}/api/users/${encodeURIComponent(email)}/avatar`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.blob() : null))
+      .then((blob) => {
+        if (blob) {
+          objectUrl = URL.createObjectURL(blob);
+          setBlobUrl(objectUrl);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [email, hasAvatar]);
+
+  if (blobUrl) {
+    return (
+      <Avatar
+        size={36}
+        src={blobUrl}
+        style={{ flexShrink: 0 }}
+      />
+    );
+  }
+
+  return (
+    <div
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: '50%',
+        background: ROLE_COLORS[role] + '30',
+        color: ROLE_COLORS[role],
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 16,
+        fontWeight: 600,
+        flexShrink: 0,
+      }}
+    >
+      {name.charAt(0).toUpperCase()}
+    </div>
+  );
+};
+
 const UserManagement = () => {
   const { user: currentUser } = useAuth();
   const { countries: countryList } = useCountry();
   const { t } = useLanguage();
 
   const [users, setUsers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
@@ -89,10 +149,15 @@ const UserManagement = () => {
     setLoading(true);
     try {
       const res = await userAPI.list(filters);
-      setUsers(adaptUsers(res.data));
+      const adapted = adaptUsers(res.data);
+      setUsers(adapted);
+      // 無篩選條件時同步更新 allUsers（用於角色統計）
+      const hasFilters = filters.search || filters.role || filters.country;
+      if (!hasFilters) setAllUsers(adapted);
     } catch (err) {
       console.warn('使用者 API 失敗，使用 mock 資料', err);
       setUsers(mockUserList);
+      setAllUsers(mockUserList);
     } finally {
       setLoading(false);
     }
@@ -131,9 +196,10 @@ const UserManagement = () => {
     });
   };
 
-  // ===== 檢查是否為跨國使用者（admin 可看但不可操作）=====
+  // ===== 檢查是否為跨國使用者（一般使用者可看但不可操作）=====
   const isCrossCountry = (record) => {
-    return isAdmin && record.country !== myCountry;
+    // root 和 admin 都可以跨國操作，不受限制
+    return false;
   };
 
   // ===== 檢查是否可操作目標使用者 =====
@@ -313,22 +379,12 @@ const UserManagement = () => {
         const isSelf = myEmail && record.email.toLowerCase() === myEmail.toLowerCase();
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: '50%',
-                background: ROLE_COLORS[record.role] + '30',
-                color: ROLE_COLORS[record.role],
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 16,
-                fontWeight: 600,
-              }}
-            >
-              {record.name.charAt(0).toUpperCase()}
-            </div>
+            <UserAvatar
+              email={record.email}
+              name={record.name}
+              role={record.role}
+              hasAvatar={!!record.avatar_url}
+            />
             <div>
               <div style={{ fontWeight: 500 }}>
                 {record.name}
@@ -524,16 +580,26 @@ const UserManagement = () => {
       </div>
 
       <div className="settings-content">
-        <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {Object.keys(ROLES).map((key) => {
             const role = ROLES[key];
             const label = t(`roles.${role}`);
-            const count = users.filter((u) => u.role === role).length;
+            const count = allUsers.filter((u) => u.role === role).length;
+            const isActive = filterRole === role;
+            const isFiltering = !!filterRole;
             return (
               <Tag
                 key={role}
                 color={ROLE_COLORS[role]}
-                style={{ cursor: 'pointer', fontSize: 12 }}
+                style={{
+                  cursor: 'pointer',
+                  fontSize: isActive ? 14 : 12,
+                  fontWeight: isActive ? 600 : 400,
+                  opacity: isFiltering && !isActive ? 0.45 : 1,
+                  transform: isActive ? 'scale(1.1)' : 'scale(1)',
+                  transition: 'all 0.25s ease',
+                  padding: isActive ? '2px 10px' : '1px 7px',
+                }}
                 onClick={() => handleFilterRole(filterRole === role ? null : role)}
               >
                 {label}: {count} {t('common.person')}
@@ -541,7 +607,7 @@ const UserManagement = () => {
             );
           })}
           <Tag style={{ fontSize: 12 }}>
-            {t('userManagement.totalCount', { total: users.length, active: users.filter((u) => u.status === 'active').length })}
+            {t('userManagement.totalCount', { total: allUsers.length, active: allUsers.filter((u) => u.status === 'active').length })}
           </Tag>
         </div>
 

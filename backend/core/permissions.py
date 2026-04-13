@@ -33,6 +33,14 @@ ROLE_HIERARCHY = {
     Role.USER: 1,
 }
 
+# 具有跨國操作權限的角色（root 和 admin 皆可跨國）
+CROSS_COUNTRY_ROLES = {Role.ROOT.value, Role.ADMIN.value}
+
+
+def is_cross_country_role(role: str) -> bool:
+    """檢查角色是否具有跨國操作權限（root / admin）"""
+    return role in CROSS_COUNTRY_ROLES
+
 ROLE_PERMISSIONS = {
     Role.ROOT: [
         "view_announcements", "use_agents", "view_library", "chat_history",

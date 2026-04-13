@@ -57,3 +57,7 @@ Azure.md.txt
 CTBC portal.txt
 資料庫設計.md
 *.xlsx
+*.docx
+generate_spec_docx.py
+CTBC_AI_Portal_業務功能規格書v1.0.md
+generate_role_permissions_excel.py
