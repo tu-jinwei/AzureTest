@@ -24,6 +24,9 @@ import { useLanguage } from '../contexts/LanguageContext';
 import PdfThumbnail from '../components/PdfThumbnail';
 import './Library.css';
 
+// 館名卡片條列式清單每頁顯示幾筆
+const CARD_LIST_PAGE_SIZE = 4;
+
 /** 判斷檔名是否為 PDF */
 const isPdfFile = (filename) => {
   if (!filename) return false;
@@ -58,10 +61,6 @@ const getFileIcon = (filename) => {
   }
 };
 
-// 館名卡片概覽每館最多載入幾張縮圖
-const CARD_THUMB_LIMIT = 10;
-// carousel 每頁顯示幾張縮圖
-const CAROUSEL_PAGE_SIZE = 2;
 
 /** 館封面圖片元件（需要 auth 的圖片載入） */
 const LibraryCoverImage = memo(({ catalogId, country }) => {
@@ -123,10 +122,8 @@ const Library = () => {
   const [selectedLibrary, setSelectedLibrary] = useState(null);
   const [selectedDoc, setSelectedDoc] = useState(null);
 
-  // 館名卡片概覽用的縮圖 map: { docId: blobUrl }（頁面載入後背景載入）
-  const [cardThumbnails, setCardThumbnails] = useState({});
-  // carousel 頁碼 map: { libraryId: pageIndex }
-  const [carouselPage, setCarouselPage] = useState({});
+  // 館名卡片條列式清單分頁 map: { libraryId: pageIndex }
+  const [cardListPage, setCardListPage] = useState({});
   // 展開館名時，每個文件的 PDF 縮圖 blob URL map: { docId: blobUrl }
   const [docThumbnails, setDocThumbnails] = useState({});
 
@@ -156,24 +153,6 @@ const Library = () => {
       const libs = adaptLibraryDocs(docsRes.data, cats.length > 0 ? cats : undefined)
         .filter((lib) => lib.documents.length > 0);
       setLibraries(libs);
-
-      // 背景載入館名卡片概覽用的縮圖（每館前 CARD_THUMB_LIMIT 筆有 PDF 的文件）
-      setCardThumbnails({});
-      libs.forEach((lib) => {
-        lib.documents.slice(0, CARD_THUMB_LIMIT).forEach(async (doc) => {
-          const pdfFile = doc.files?.find((f) => isPdfFile(f.filename));
-          if (!pdfFile) return;
-          try {
-            const res = await libraryAPI.preview(doc.id, country, pdfFile.filename, false);
-            const blob = new Blob([res.data], { type: 'application/pdf' });
-            const url = URL.createObjectURL(blob);
-            setCardThumbnails((prev) => ({ ...prev, [doc.id]: url }));
-          } catch {
-            // 縮圖載入失敗不影響頁面
-          }
-        });
-      });
-
       return libs;
     } catch (err) {
       console.warn('圖書館 API 失敗，使用 mock 資料', err);
@@ -440,82 +419,51 @@ const Library = () => {
                   <span className="library-card-name">{lib.name}</span>
                   <span className="library-card-count">({t('libraryPage.documentsCount', { count: lib.documents.length })})</span>
                 </div>
-                {/* 下半部：PDF 縮圖 carousel */}
+                {/* 下半部：條列式文件清單（每頁 4 筆，分頁） */}
                 {(() => {
                   const docs = lib.documents;
-                  const totalPages = Math.ceil(docs.length / CAROUSEL_PAGE_SIZE);
-                  const page = carouselPage[lib.id] || 0;
-                  const visibleDocs = docs.slice(page * CAROUSEL_PAGE_SIZE, (page + 1) * CAROUSEL_PAGE_SIZE);
+                  const totalPages = Math.ceil(docs.length / CARD_LIST_PAGE_SIZE);
+                  const page = cardListPage[lib.id] || 0;
+                  const visibleDocs = docs.slice(page * CARD_LIST_PAGE_SIZE, (page + 1) * CARD_LIST_PAGE_SIZE);
                   return (
-                    <div className="library-card-carousel">
-                      {/* 左箭頭 */}
-                      <button
-                        className="carousel-arrow carousel-arrow-left"
-                        disabled={page === 0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCarouselPage((prev) => ({ ...prev, [lib.id]: page - 1 }));
-                        }}
-                      >
-                        <LeftOutlined />
-                      </button>
-
-                      {/* 縮圖區域 */}
-                      <div className="carousel-track">
+                    <div className="library-card-doclist">
+                      <ul className="library-card-doclist-items">
                         {visibleDocs.map((doc) => (
-                          <div
+                          <li
                             key={doc.id}
-                            className="library-card-thumb-item"
-                            onClick={() => handleDocClick(doc)}
+                            className="library-card-doclist-item"
+                            onClick={(e) => { e.stopPropagation(); handleDocClick(doc); }}
                           >
-                            <div className="library-card-thumb-cover">
-                              {cardThumbnails[doc.id] ? (
-                                <PdfThumbnail
-                                  url={cardThumbnails[doc.id]}
-                                  fitHeight={120}
-                                  className="library-card-thumb-pdf"
-                                />
-                              ) : doc.files?.some((f) => isPdfFile(f.filename)) ? (
-                                <Spin indicator={<LoadingOutlined style={{ fontSize: 16 }} spin />} />
-                              ) : (
-                                React.cloneElement(
-                                  getFileIcon(doc.files?.[0]?.filename || doc.name),
-                                  { style: { fontSize: 28 } }
-                                )
-                              )}
-                            </div>
-                            <div className="library-card-thumb-name">{doc.name}</div>
-                          </div>
+                            <span className="library-card-doclist-icon">
+                              {(() => {
+                                const icon = getFileIcon(doc.files?.[0]?.filename || doc.name);
+                                return React.cloneElement(icon, {
+                                  style: { ...icon.props.style, fontSize: 16 },
+                                });
+                              })()}
+                            </span>
+                            <span className="library-card-doclist-name">{doc.name}</span>
+                          </li>
                         ))}
+                      </ul>
+                      {/* 分頁控制（永遠佔位，超過 4 筆才顯示內容，確保卡片高度一致） */}
+                      <div className={`library-card-doclist-pagination${totalPages > 1 ? '' : ' doclist-pagination-hidden'}`}>
+                        <button
+                          className="doclist-page-btn"
+                          disabled={page === 0}
+                          onClick={(e) => { e.stopPropagation(); setCardListPage((prev) => ({ ...prev, [lib.id]: page - 1 })); }}
+                        >
+                          <LeftOutlined />
+                        </button>
+                        <span className="doclist-page-info">{page + 1} / {totalPages}</span>
+                        <button
+                          className="doclist-page-btn"
+                          disabled={page >= totalPages - 1}
+                          onClick={(e) => { e.stopPropagation(); setCardListPage((prev) => ({ ...prev, [lib.id]: page + 1 })); }}
+                        >
+                          <RightOutlined />
+                        </button>
                       </div>
-
-                      {/* 右箭頭 */}
-                      <button
-                        className="carousel-arrow carousel-arrow-right"
-                        disabled={page >= totalPages - 1}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCarouselPage((prev) => ({ ...prev, [lib.id]: page + 1 }));
-                        }}
-                      >
-                        <RightOutlined />
-                      </button>
-
-                      {/* 頁面指示點 */}
-                      {totalPages > 1 && (
-                        <div className="carousel-dots">
-                          {Array.from({ length: totalPages }, (_, i) => (
-                            <span
-                              key={i}
-                              className={`carousel-dot${i === page ? ' active' : ''}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCarouselPage((prev) => ({ ...prev, [lib.id]: i }));
-                              }}
-                            />
-                          ))}
-                        </div>
-                      )}
                     </div>
                   );
                 })()}
