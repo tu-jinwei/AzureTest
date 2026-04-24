@@ -325,7 +325,7 @@ const AgentChat = () => {
           <RobotOutlined style={{ fontSize: 20 }} />
           <Select
             placeholder={t('agentChat.selectAgent')}
-            style={{ width: 300 }}
+            style={{ flex: 1, minWidth: 0 }}
             value={selectedAgent?.id}
             onChange={handleSelectAgent}
             options={agents.map((a) => ({ value: a.id, label: a.name }))}
