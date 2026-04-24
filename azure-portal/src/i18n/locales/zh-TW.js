@@ -42,8 +42,8 @@ const zhTW = {
 
   // ===== 登入頁 =====
   login: {
-    title: 'CTBC AI Portal',
-    subtitle: '中國信託 AI 智能平台',
+    title: 'Axon',
+    subtitle: 'Axon AI 智能平台',
     emailLabel: 'Email',
     emailPlaceholder: '請輸入您的 Email',
     getOTP: '取得驗證碼',

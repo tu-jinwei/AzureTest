@@ -35,23 +35,10 @@
   gap: 8px;
 }
 
-.topbar-logo-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
+.topbar-logo-img {
   height: 28px;
-  background: var(--primary-color);
-  color: white;
-  border-radius: 6px;
-  font-weight: 700;
-  font-size: 16px;
-}
-
-.topbar-logo-text {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
+  width: auto;
+  display: block;
 }
 
 .topbar-team {
@@ -209,15 +196,8 @@
     font-size: 20px;
   }
 
-  .topbar-logo-icon {
-    width: 36px;
+  .topbar-logo-img {
     height: 36px;
-    font-size: 20px;
-    border-radius: 8px;
-  }
-
-  .topbar-logo-text {
-    font-size: 18px;
   }
 
   .topbar-team-name {

@@ -42,8 +42,8 @@ const en = {
 
   // ===== Login =====
   login: {
-    title: 'CTBC AI Portal',
-    subtitle: 'CTBC AI Smart Platform',
+    title: 'Axon',
+    subtitle: 'Axon AI Smart Platform',
     emailLabel: 'Email',
     emailPlaceholder: 'Enter your email',
     getOTP: 'Get OTP',

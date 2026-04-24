@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Input, Button, message, Typography } from 'antd';
-import { MailOutlined, LockOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { MailOutlined, LockOutlined } from '@ant-design/icons';
 import { authAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import './Login.css';
 
-const { Title, Text, Link } = Typography;
+const { Text, Link } = Typography;
 
 const Login = () => {
   const navigate = useNavigate();
@@ -160,13 +160,8 @@ const Login = () => {
       <div className="login-card">
         {/* Logo 區域 */}
         <div className="login-header">
-          <div className="login-logo">
-            <SafetyCertificateOutlined className="login-logo-icon" />
-          </div>
-          <Title level={3} className="login-title">
-            {t('login.title')}
-          </Title>
-          <Text className="login-subtitle">{t('login.subtitle')}</Text>
+          <img src={`${import.meta.env.BASE_URL}logo-icon-dark-transparent.png`} alt="Axon" className="login-logo-icon-img" />
+          <img src={`${import.meta.env.BASE_URL}logo-text-dark-transparent.png`} alt="Axon" className="login-logo-text-img" />
         </div>
 
         {/* Step 1: 輸入 Email */}

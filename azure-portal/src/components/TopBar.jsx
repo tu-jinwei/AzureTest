@@ -275,8 +275,7 @@ const TopBar = ({ onToggleSidebar }) => {
       <div className="topbar-left">
         <MenuOutlined className="topbar-hamburger" onClick={onToggleSidebar} />
         <div className="topbar-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
-          <span className="topbar-logo-icon">N</span>
-          <span className="topbar-logo-text">Web Portal</span>
+          <img src={`${import.meta.env.BASE_URL}logo-dark-transparent.png`} alt="Axon" className="topbar-logo-img" />
         </div>
         {user && (
           <div className="topbar-team">
