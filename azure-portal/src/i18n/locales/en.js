@@ -282,6 +282,9 @@ const en = {
     docsUnit: 'docs',
     selectDocsLabel: 'Select Documents',
     selectCatalogFirst: 'Please select a library first',
+    allCountries: 'All Countries',
+    createdAllCountries: 'Published to {count} countries successfully',
+    someCountriesFailed: 'Failed to publish to: {countries}',
   },
 
   // ===== Agent Permissions =====

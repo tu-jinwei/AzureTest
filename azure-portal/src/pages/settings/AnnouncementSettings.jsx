@@ -50,6 +50,7 @@ const AnnouncementSettings = () => {
   const [piiScanning, setPiiScanning] = useState(false);
   const [piiPassed, setPiiPassed] = useState(true); // true = 通過或未掃描
   const [form] = Form.useForm();
+  const watchedTargetCountry = Form.useWatch('target_country', form);
 
   // 圖書館文件選擇相關（先選館→再選文件）
   const [libCatalogs, setLibCatalogs] = useState([]); // 館名列表
@@ -280,7 +281,62 @@ const AnnouncementSettings = () => {
       };
 
       // super_admin 使用表單中選擇的目標國家
-      const countryParam = isSuperAdmin ? values.target_country : undefined;
+      const targetCountry = isSuperAdmin ? values.target_country : undefined;
+
+      // ===== 全部國家批次建立 =====
+      if (targetCountry === 'ALL' && !editingItem) {
+        const successCountries = [];
+        const failedCountries = [];
+
+        for (const c of countries) {
+          try {
+            const res = await announcementAPI.create(toAnnouncementCreate(adapterData), c.code);
+            const nid = res.data?.detail;
+
+            // 如果有選擇檔案，上傳附件
+            if (fileList.length > 0 && nid) {
+              const formData = new FormData();
+              fileList.forEach((f) => {
+                const file = f.originFileObj || f;
+                formData.append('file', file);
+              });
+              try {
+                await announcementAPI.uploadFile(nid, formData, c.code);
+              } catch (uploadErr) {
+                console.error(`上傳附件到 ${c.code} 失敗`, uploadErr);
+                // 回滾：刪除剛建立的公告
+                try {
+                  await announcementAPI.delete(nid, c.code);
+                } catch (delErr) {
+                  console.error(`回滾刪除 ${c.code} 公告失敗`, delErr);
+                }
+                failedCountries.push(c.code);
+                continue;
+              }
+            }
+            successCountries.push(c.code);
+          } catch (err) {
+            console.error(`建立公告到 ${c.code} 失敗`, err);
+            failedCountries.push(c.code);
+          }
+        }
+
+        if (successCountries.length > 0) {
+          message.success(t('announcementSettings.createdAllCountries', { count: successCountries.length }));
+        }
+        if (failedCountries.length > 0) {
+          message.warning(t('announcementSettings.someCountriesFailed', { countries: failedCountries.join(', ') }));
+        }
+
+        setModalOpen(false);
+        setFileList([]);
+        form.resetFields();
+        fetchAnnouncements(effectiveCountry);
+        return;
+      }
+
+      // ===== 單一國家建立/編輯（原有邏輯） =====
+      const countryParam = targetCountry;
 
       let noticeId;
       if (editingItem) {
@@ -486,7 +542,11 @@ const AnnouncementSettings = () => {
             >
               <Select
                 placeholder={t('announcementSettings.targetCountryPlaceholder')}
-                options={countries.map((c) => ({ value: c.code, label: `${t(`countries.${c.code}`) || c.name} (${c.code})` }))}
+                options={[
+                  // 「全部國家」僅在新增模式下顯示（編輯時各國公告 ID 不同，不支援批次）
+                  ...(!editingItem ? [{ value: 'ALL', label: t('announcementSettings.allCountries') }] : []),
+                  ...countries.map((c) => ({ value: c.code, label: `${t(`countries.${c.code}`) || c.name} (${c.code})` })),
+                ]}
               />
             </Form.Item>
           )}
@@ -586,7 +646,9 @@ const AnnouncementSettings = () => {
               </div>
             )}
           </Form.Item>
-          {/* 圖書館資料選擇器：先選館→再選文件 */}
+          {/* 圖書館資料選擇器：先選館→再選文件（選擇「全部國家」時隱藏，因為各國圖書館文件不同） */}
+          {watchedTargetCountry !== 'ALL' && (
+          <>
           <Divider style={{ margin: '16px 0 8px' }}>
             <span style={{ fontSize: 13, color: '#722ed1' }}>
               <BookOutlined style={{ marginRight: 4 }} />
@@ -682,6 +744,8 @@ const AnnouncementSettings = () => {
               }}
             />
           </Form.Item>
+          </>
+          )}
         </Form>
       </Modal>
     </div>

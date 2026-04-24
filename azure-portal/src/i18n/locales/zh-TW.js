@@ -285,6 +285,9 @@ const zhTW = {
     docsUnit: '份文件',
     selectDocsLabel: '選擇文件',
     selectCatalogFirst: '請先選擇館名',
+    allCountries: '全部國家',
+    createdAllCountries: '已成功發布到 {count} 個國家',
+    someCountriesFailed: '部分國家發布失敗：{countries}',
   },
 
   // ===== Agent 權限設定 =====
