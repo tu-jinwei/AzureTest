@@ -13,10 +13,14 @@
     "@ant-design/icons": "^6.1.0",
     "antd": "^6.3.1",
     "axios": "^1.13.6",
+    "highlight.js": "^11.11.1",
     "pdfjs-dist": "^5.5.207",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router-dom": "^6.30.3"
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^6.30.3",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

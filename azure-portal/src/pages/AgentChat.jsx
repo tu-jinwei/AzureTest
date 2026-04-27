@@ -16,6 +16,10 @@ import {
   LeftOutlined,
   RightOutlined,
 } from '@ant-design/icons';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import 'highlight.js/styles/github.css';
 import { useChat } from '../contexts/ChatContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import './AgentChat.css';
@@ -387,10 +391,15 @@ const AgentChat = () => {
                       <span></span>
                     </div>
                   ) : (
-                    <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
-                      {msg.content}
+                    <div className={`markdown-body${msg.role === 'user' ? ' markdown-body--user' : ''}`}>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeHighlight]}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
                       {msg.isStreaming && <span className="streaming-cursor">▊</span>}
-                    </p>
+                    </div>
                   )}
                   {msg.time && (
                     <span className="chat-message-time">{msg.time}</span>
