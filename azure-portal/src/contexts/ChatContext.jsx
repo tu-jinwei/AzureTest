@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { agentAPI, chatAPI } from '../services/api';
 import { adaptAgents, adaptSessionList, adaptSessionDetail } from '../utils/adapters';
-import { agents as mockAgents } from '../data/mockData';
+import { useAuth } from './AuthContext';
 
 const ChatContext = createContext(null);
 
@@ -46,6 +46,9 @@ function sortAgentsByLastUsed(agentList) {
 }
 
 export const ChatProvider = ({ children }) => {
+  // ── 等待 Auth 完成後才載入 Agent ────────────────────────────
+  const { user, loading: authLoading } = useAuth();
+
   // ── Agent 列表 ──────────────────────────────────────────────
   const [agents, setAgents] = useState([]);
   const [agentsLoading, setAgentsLoading] = useState(true);
@@ -67,21 +70,29 @@ export const ChatProvider = ({ children }) => {
   // abortRef 存放中斷串流的函式，不放進 state 避免觸發 re-render
   const abortRef = useRef(null);
 
-  // ── 載入 Agent 列表（只在 Provider 掛載時執行一次）──────────
+  // ── 載入 Agent 列表（等 Auth 完成且使用者已登入後才執行）────
   useEffect(() => {
+    // Auth 尚未完成或使用者未登入，不呼叫 API
+    if (authLoading) return;
+    if (!user) {
+      setAgents([]);
+      setAgentsLoading(false);
+      return;
+    }
+
     const fetchAgents = async () => {
       try {
         const res = await agentAPI.list();
         setAgents(sortAgentsByLastUsed(adaptAgents(res.data)));
       } catch (err) {
-        console.warn('Agent API 失敗，使用 mock 資料', err);
-        setAgents(sortAgentsByLastUsed(mockAgents));
+        console.warn('Agent API 失敗', err);
+        setAgents([]); // 不 fallback 到 mock，避免顯示無權限的假資料
       } finally {
         setAgentsLoading(false);
       }
     };
     fetchAgents();
-  }, []);
+  }, [authLoading, user]);
 
   // ── 當選擇 Agent 時載入該 Agent 的 Session 列表 ──────────────
   const fetchSessions = useCallback(async (agentId) => {
