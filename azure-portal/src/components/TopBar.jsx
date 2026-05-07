@@ -39,8 +39,10 @@ const fetchAvatarBlobUrl = async () => {
   const token = getToken();
   if (!token) return null;
   try {
-    const res = await fetch(`${BASE_PREFIX}/api/auth/avatar`, {
+    // 加上時間戳避免瀏覽器快取舊使用者的頭像
+    const res = await fetch(`${BASE_PREFIX}/api/auth/avatar?t=${Date.now()}`, {
       headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
     });
     if (!res.ok) return null;
     const blob = await res.blob();
@@ -92,10 +94,15 @@ const TopBar = ({ onToggleSidebar }) => {
     countries.find((c) => c.code === displayCountry)?.name ||
     displayCountry;
 
+  // 當 user.email 變更時（切換使用者），立即清除舊頭像
+  useEffect(() => {
+    setAvatarBlobUrl(null);
+  }, [user?.email]);
+
   // 當 user.avatar_url 變更時，重新取得 blob URL
   useEffect(() => {
     let objectUrl = null;
-    if (user?.avatar_url) {
+    if (user?.email && user?.avatar_url) {
       fetchAvatarBlobUrl().then((url) => {
         objectUrl = url;
         setAvatarBlobUrl(url);
@@ -106,7 +113,7 @@ const TopBar = ({ onToggleSidebar }) => {
     return () => {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [user?.avatar_url]);
+  }, [user?.email, user?.avatar_url]);
 
   const handleLogout = async () => {
     await logout();
@@ -281,7 +288,7 @@ const TopBar = ({ onToggleSidebar }) => {
           <div className="topbar-team">
             <TeamOutlined style={{ color: 'var(--primary-color)', marginRight: 6 }} />
             <span className="topbar-team-name">
-              {user.department ? (t(`departments.${user.department}`) || user.department) : ''}
+              {user.department || ''}
             </span>
           </div>
         )}

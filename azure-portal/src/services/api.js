@@ -559,9 +559,25 @@ export const chatAPI = {
 
 // ===== 國家 API =====
 export const countryAPI = {
-  /** 取得已設定 Local DB 的國家列表 */
+  /** 取得啟用中的國家列表（所有登入者） */
   list: () =>
     api.get('/countries'),
+
+  /** 取得全部國家含停用（root only） */
+  listAll: () =>
+    api.get('/countries/all'),
+
+  /** 新增國家（root only） */
+  create: (data) =>
+    api.post('/countries', data),
+
+  /** 編輯國家（root only） */
+  update: (code, data) =>
+    api.put(`/countries/${code}`, data),
+
+  /** 刪除國家（root only） */
+  delete: (code) =>
+    api.delete(`/countries/${code}`),
 };
 
 // ===== 稽核日誌 API =====

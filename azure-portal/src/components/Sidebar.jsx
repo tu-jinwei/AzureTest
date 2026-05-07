@@ -13,6 +13,7 @@ import {
   TeamOutlined,
   AuditOutlined,
   BarChartOutlined,
+  GlobalOutlined,
   DownOutlined,
   RightOutlined,
 } from '@ant-design/icons';
@@ -54,6 +55,9 @@ const Sidebar = ({ collapsed }) => {
   }
   if (hasPermission('cross_country_logs')) {
     settingsChildren.push({ key: 'audit-logs', icon: <AuditOutlined />, label: t('sidebar.auditLogs'), path: '/settings/audit-logs' });
+  }
+  if (hasPermission('manage_countries')) {
+    settingsChildren.push({ key: 'country-management', icon: <GlobalOutlined />, label: t('sidebar.countryManagement'), path: '/settings/countries' });
   }
 
   const menuItems = [

@@ -511,13 +511,19 @@ const Library = () => {
       {/* ===== 文件資訊 Modal ===== */}
       <Modal
         title={
-          <span>
-            {selectedDoc && getFileIcon(selectedDoc.files?.[0]?.filename || selectedDoc.name)}
-            <span style={{ marginLeft: 8 }}>{selectedDoc?.name}</span>
+          <span style={{ display: 'flex', alignItems: 'flex-start', gap: 8, paddingRight: 32 }}>
+            <span style={{ flexShrink: 0, marginTop: 2 }}>
+              {selectedDoc && getFileIcon(selectedDoc.files?.[0]?.filename || selectedDoc.name)}
+            </span>
+            <span style={{ wordBreak: 'break-word', minWidth: 0 }}>
+              {selectedDoc?.name}
+            </span>
           </span>
         }
         open={!!selectedDoc}
         onCancel={handleCloseModal}
+        wrapClassName="library-doc-modal"
+        styles={{ header: { paddingBottom: 12 } }}
         footer={[
           selectedDoc?.hasFile && (
             <Button

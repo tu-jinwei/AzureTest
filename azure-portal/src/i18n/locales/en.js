@@ -108,6 +108,7 @@ const en = {
     usageStats: 'Usage Reports',
     userManagement: 'User Management',
     auditLogs: 'Audit Logs',
+    countryManagement: 'Country Management',
   },
 
   // ===== Home =====
@@ -134,6 +135,8 @@ const en = {
     librarySubtitle: '(Online Library)',
     noLibraryDocs: 'No library documents available',
     noPreview: 'No preview',
+    relatedLibraryDocs: '📚 Library Documents',
+    downloadLibraryDoc: 'Download',
   },
 
   // ===== Agent Chat =====
@@ -285,6 +288,15 @@ const en = {
     allCountries: 'All Countries',
     createdAllCountries: 'Published to {count} countries successfully',
     someCountriesFailed: 'Failed to publish to: {countries}',
+    // Leave confirm dialog
+    leaveConfirmTitle: 'Unsaved Changes',
+    leaveConfirmMessage: 'Your changes have not been saved. What would you like to do?',
+    leaveConfirmDiscard: 'Discard',
+    leaveConfirmDraft: 'Save as Draft',
+    leaveConfirmContinue: 'Keep Editing',
+    savedAsDraft: 'Saved as draft',
+    saveDraftFailed: 'Failed to save draft, please try again',
+    draftDefaultSubject: '(Untitled Draft)',
   },
 
   // ===== Agent Permissions =====
@@ -590,6 +602,37 @@ const en = {
     entityFile: 'File "{filename}" contains {count} PII entities ({types})',
     understood: 'I understand',
     scanFailed: 'File security check failed. Please try again later.',
+  },
+
+  // ===== Country Management =====
+  countryManagement: {
+    title: 'Country Management',
+    addCountry: 'Add Country',
+    editCountry: 'Edit Country',
+    codeLabel: 'Country Code',
+    codePlaceholder: 'e.g. TW, JP',
+    codeHint: '2–5 uppercase letters, cannot be changed after creation',
+    nameZhLabel: 'Chinese Name',
+    nameZhPlaceholder: 'e.g. 台灣',
+    nameEnLabel: 'English Name',
+    nameEnPlaceholder: 'e.g. Taiwan',
+    sortOrderLabel: 'Sort Order',
+    isActiveLabel: 'Status',
+    active: 'Active',
+    inactive: 'Inactive',
+    confirmDelete: 'Are you sure you want to delete this country? This action cannot be undone.',
+    confirmDeleteBtn: 'Delete',
+    createSuccess: 'Country created successfully',
+    updateSuccess: 'Country updated successfully',
+    deleteSuccess: 'Country deleted successfully',
+    createFailed: 'Failed to create country',
+    updateFailed: 'Failed to update country',
+    deleteFailed: 'Failed to delete country',
+    codeRequired: 'Please enter a country code',
+    nameZhRequired: 'Please enter the Chinese name',
+    nameEnRequired: 'Please enter the English name',
+    noCountries: 'No countries found',
+    dbHint: 'Note: After adding a country, DevOps must configure the corresponding DB connection in .env for the country to function properly.',
   },
 };
 

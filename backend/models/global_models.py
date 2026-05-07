@@ -10,6 +10,19 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from core.database import GlobalBase
 
 
+class Country(GlobalBase):
+    """國家管理表"""
+    __tablename__ = "countries"
+
+    code       = Column(String(5),  primary_key=True)          # 國家代碼，如 TW
+    name_zh    = Column(String(50), nullable=False)            # 中文名稱
+    name_en    = Column(String(50), nullable=False)            # 英文名稱
+    is_active  = Column(Boolean,    nullable=False, default=True)
+    sort_order = Column(Integer,    nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
 class UserRouteMap(GlobalBase):
     """使用者路由映射表"""
     __tablename__ = "user_route_map"

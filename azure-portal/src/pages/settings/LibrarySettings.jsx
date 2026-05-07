@@ -28,6 +28,8 @@ CatalogCoverImage.displayName = 'CatalogCoverImage';
 
 const LibrarySettings = () => {
   const { effectiveCountry, countries, isSuperAdmin, displayCountry } = useCountry();
+  // isSuperAdmin 已包含 root 和 admin，都可以選擇國家上傳
+  const canSelectCountry = isSuperAdmin;
   const { t } = useLanguage();
   const [libraries, setLibraries] = useState([]);
   const [catalogs, setCatalogs] = useState([]);
@@ -204,7 +206,7 @@ const LibrarySettings = () => {
       const fileList = v.file?.fileList || [];
       if (fileList.length > 0) fd.append('file', fileList[0].originFileObj);
       const p = { library_name: v.libraryName, name: v.name, description: v.description || '' };
-      if (isSuperAdmin && v.target_country) p.country = v.target_country;
+      if (canSelectCountry && v.target_country) p.country = v.target_country;
       await libraryAPI.upload(fd, { params: p });
       message.success(t('librarySettings.documentUploaded'));
       setUploadModal(false);
@@ -677,10 +679,12 @@ const LibrarySettings = () => {
                           )}
                         </div>
                         <div className="catalog-card-body">
-                          <div className="catalog-card-name">
-                            <FolderOutlined style={{ marginRight: 6, color: 'var(--primary-color)' }} />
-                            {cat.name}
-                          </div>
+                          <Tooltip title={cat.name} placement="top">
+                            <div className="catalog-card-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'default', display: 'flex', alignItems: 'center' }}>
+                              <FolderOutlined style={{ marginRight: 6, color: 'var(--primary-color)', flexShrink: 0 }} />
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat.name}</span>
+                            </div>
+                          </Tooltip>
                           <div className="catalog-card-stat">
                             <Tag color={stat.docCount > 0 ? 'blue' : 'default'}>
                               {t('librarySettings.documentCount', { count: stat.docCount })}
@@ -813,7 +817,7 @@ const LibrarySettings = () => {
         }}
       >
         <Form form={form} layout="vertical">
-          {isSuperAdmin && (
+          {canSelectCountry && (
             <Form.Item
               name="target_country"
               label={<span><GlobalOutlined style={{ marginRight: 4 }} />{t('announcementSettings.targetCountry')}</span>}

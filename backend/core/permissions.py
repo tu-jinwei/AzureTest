@@ -46,12 +46,13 @@ ROLE_PERMISSIONS = {
         "view_announcements", "use_agents", "view_library", "chat_history",
         "manage_users", "manage_library", "manage_announcements",
         "manage_agent_permissions", "access_all_agents", "access_all_docs",
-        "cross_country_logs",
+        "cross_country_logs", "manage_countries",
     ],
     Role.ADMIN: [
         "view_announcements", "use_agents", "view_library", "chat_history",
         "manage_users", "manage_library", "manage_announcements",
         "manage_agent_permissions", "access_all_agents", "access_all_docs",
+        "manage_countries",
     ],
     Role.USER: [
         "view_announcements", "use_agents", "view_library", "chat_history",

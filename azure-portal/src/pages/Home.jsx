@@ -10,7 +10,6 @@ import {
   FileExcelOutlined,
   FilePptOutlined,
   FileTextOutlined,
-  LinkOutlined,
   DownloadOutlined,
   PaperClipOutlined,
   EyeOutlined,
@@ -554,19 +553,6 @@ const Home = () => {
                           >
                             {t('home.downloadLibraryDoc')}
                           </Button>
-                          <Button
-                            type="link"
-                            size="small"
-                            icon={<LinkOutlined />}
-                            style={{ color: '#999', padding: 0, fontSize: 12 }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCloseAnnouncement();
-                              navigate(`/library?doc=${doc.docId}`);
-                            }}
-                          >
-                            {t('home.viewInLibrary')}
-                          </Button>
                         </Space>
                       </div>
                     ))}
@@ -742,10 +728,10 @@ const Home = () => {
                           <span style={{ flex: 1 }} />
                           <span style={{ color: '#999', fontSize: 13, flexShrink: 0 }}>{item.date}</span>
                         </div>
-                        {/* 第二行：內文預覽（超過 35 字元截斷） */}
+                        {/* 第二行：內文預覽（超過 100 字元截斷） */}
                         {item.content && (
                           <div style={{ color: '#888', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
-                            {item.content.length > 50 ? item.content.slice(0, 50) + '...' : item.content}
+                            {item.content.length > 100 ? item.content.slice(0, 100) + '...' : item.content}
                           </div>
                         )}
                       </div>

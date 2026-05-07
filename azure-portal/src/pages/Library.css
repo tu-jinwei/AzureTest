@@ -581,3 +581,9 @@
     height: 180px;
   }
 }
+
+/* ===== 文件資訊 Modal 標題修正 ===== */
+.library-doc-modal .ant-modal-title {
+  overflow: visible !important;
+  white-space: normal !important;
+}

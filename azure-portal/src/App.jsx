@@ -20,6 +20,7 @@ import LibrarySettings from './pages/settings/LibrarySettings';
 import UsageStats from './pages/settings/UsageStats';
 import UserManagement from './pages/settings/UserManagement';
 import AuditLogs from './pages/settings/AuditLogs';
+import CountryManagement from './pages/settings/CountryManagement';
 
 const App = () => {
   return (
@@ -67,6 +68,9 @@ const App = () => {
                         </Route>
                         <Route element={<ProtectedRoute requiredPermission="cross_country_logs" />}>
                           <Route path="settings/audit-logs" element={<AuditLogs />} />
+                        </Route>
+                        <Route element={<ProtectedRoute requiredPermission="manage_countries" />}>
+                          <Route path="settings/countries" element={<CountryManagement />} />
                         </Route>
 
                         <Route path="*" element={<Navigate to="/" replace />} />

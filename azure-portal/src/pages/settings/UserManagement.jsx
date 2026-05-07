@@ -45,11 +45,13 @@ const UserAvatar = ({ email, name, role, hasAvatar }) => {
   const [blobUrl, setBlobUrl] = useState(null);
 
   useEffect(() => {
-    if (!hasAvatar) return;
     let objectUrl = null;
+    setBlobUrl(null);
+    if (!hasAvatar) return;
     const token = getToken();
-    fetch(`${BASE_PREFIX}/api/users/${encodeURIComponent(email)}/avatar`, {
+    fetch(`${BASE_PREFIX}/api/users/${encodeURIComponent(email)}/avatar?t=${Date.now()}`, {
       headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
     })
       .then((res) => (res.ok ? res.blob() : null))
       .then((blob) => {
@@ -231,11 +233,11 @@ const UserManagement = () => {
     const defaultRole = assignableRoles.length > 0
       ? assignableRoles[assignableRoles.length - 1].value
       : ROLES.USER;
-    // 非 admin/root 預設國家為自己的國家
+    // admin/root 預設國家為自己的國家（可修改）；一般 user 固定為自己的國家
     form.setFieldsValue({
       role: defaultRole,
       status: 'active',
-      country: canChangeCountry ? undefined : myCountry,
+      country: myCountry,
     });
     setModalOpen(true);
   };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Button,
   Table,
@@ -45,6 +45,9 @@ const AnnouncementSettings = () => {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const initialFormValuesRef = useRef(null); // 記錄開啟 Modal 時的原始值
   const [searchText, setSearchText] = useState('');
   const [fileList, setFileList] = useState([]);
   const [piiScanning, setPiiScanning] = useState(false);
@@ -196,6 +199,102 @@ const AnnouncementSettings = () => {
     }
   }, [allLibraryDocs, form]);
 
+  // 偵測表單是否有變更（與開啟時的初始值比較）
+  const hasFormData = () => {
+    const values = form.getFieldsValue();
+    const initial = initialFormValuesRef.current || {};
+
+    const subject = (values.subject || '').trim();
+    const content = (values.content || '').trim();
+    const libraryDocs = (values.library_docs || []).slice().sort().join(',');
+
+    const initSubject = (initial.subject || '').trim();
+    const initContent = (initial.content || '').trim();
+    const initLibraryDocs = (initial.library_docs || []).slice().sort().join(',');
+
+    // 有新增附件也算有變更
+    if (fileList.length > 0) return true;
+    return subject !== initSubject || content !== initContent || libraryDocs !== initLibraryDocs;
+  };
+
+  // 點擊關閉時：有資料才跳確認視窗，否則直接關閉
+  const handleCancel = () => {
+    if (hasFormData()) {
+      setLeaveConfirmOpen(true);
+    } else {
+      closeModal();
+    }
+  };
+
+  // 真正關閉 Modal 並重置狀態
+  const closeModal = () => {
+    setModalOpen(false);
+    setLeaveConfirmOpen(false);
+    setFileList([]);
+    setSelectedCatalog(null);
+    setLibraryDocs([]);
+    form.resetFields();
+    setPiiPassed(true);
+  };
+
+  // 存為草稿並關閉
+  const handleSaveDraft = async () => {
+    setSavingDraft(true);
+    try {
+      const values = form.getFieldsValue();
+      // subject 為必填，若空白給預設值
+      const subject = (values.subject || '').trim() || t('announcementSettings.draftDefaultSubject');
+      const content = (values.content || '').trim();
+
+      const selectedDocIds = values.library_docs || [];
+      const libraryDocsData = selectedDocIds.map((docId) => {
+        const doc = allLibraryDocs.find((d) => d.id === docId);
+        return doc ? { docId: doc.id, name: doc.name, libraryName: doc.libraryName } : null;
+      }).filter(Boolean);
+
+      const adapterData = {
+        subject,
+        content,
+        publishStatus: 'draft',
+        libraryDocs: libraryDocsData,
+      };
+
+      const targetCountry = isSuperAdmin ? (values.target_country || displayCountry) : undefined;
+
+      let noticeId;
+      if (editingItem) {
+        await announcementAPI.update(editingItem.id, toAnnouncementUpdate(adapterData), targetCountry);
+        noticeId = editingItem.id;
+      } else {
+        const res = await announcementAPI.create(toAnnouncementCreate(adapterData), targetCountry);
+        noticeId = res.data?.detail;
+      }
+
+      // 若有附件一併上傳
+      if (fileList.length > 0 && noticeId) {
+        const formData = new FormData();
+        fileList.forEach((f) => {
+          const file = f.originFileObj || f;
+          formData.append('file', file);
+        });
+        try {
+          await announcementAPI.uploadFile(noticeId, formData, targetCountry);
+        } catch (uploadErr) {
+          console.error('草稿附件上傳失敗', uploadErr);
+        }
+      }
+
+      message.success(t('announcementSettings.savedAsDraft'));
+      fetchAnnouncements(effectiveCountry);
+      closeModal();
+    } catch (err) {
+      console.error('存為草稿失敗', err);
+      message.error(t('announcementSettings.saveDraftFailed'));
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
   const handleAdd = () => {
     setEditingItem(null);
     setFileList([]);
@@ -208,6 +307,8 @@ const AnnouncementSettings = () => {
       // super_admin 預設選中當前顯示的國家
       ...(isSuperAdmin ? { target_country: displayCountry } : {}),
     });
+    // 記錄初始值（新增模式全空）
+    initialFormValuesRef.current = { subject: '', content: '', library_docs: [] };
     // 載入圖書館館名 + 文件
     fetchLibraryCatalogs(effectiveCountry);
     setModalOpen(true);
@@ -226,6 +327,12 @@ const AnnouncementSettings = () => {
       // 編輯時使用當前顯示的國家
       ...(isSuperAdmin ? { target_country: displayCountry } : {}),
     });
+    // 記錄初始值（編輯模式記錄原始資料）
+    initialFormValuesRef.current = {
+      subject: record.subject || '',
+      content: record.content || '',
+      library_docs: existingDocIds,
+    };
     // 載入圖書館館名 + 文件，載入完成後自動推斷已選的館並篩選文件
     fetchLibraryCatalogs(effectiveCountry).then((loadedDocs) => {
       if (record.libraryDocs?.length > 0) {
@@ -517,7 +624,7 @@ const AnnouncementSettings = () => {
       <Modal
         title={editingItem ? t('announcementSettings.editAnnouncement') : t('announcementSettings.addAnnouncement')}
         open={modalOpen}
-        onCancel={() => setModalOpen(false)}
+        onCancel={handleCancel}
         onOk={handleSave}
         okText={piiScanning ? t('pii.scanningFiles') : t('common.save')}
         cancelText={t('common.cancel')}
@@ -747,6 +854,41 @@ const AnnouncementSettings = () => {
           </>
           )}
         </Form>
+      </Modal>
+      {/* ===== 離開確認視窗 ===== */}
+      <Modal
+        title={t('announcementSettings.leaveConfirmTitle')}
+        open={leaveConfirmOpen}
+        onCancel={() => setLeaveConfirmOpen(false)}
+        footer={[
+          <Button
+            key="discard"
+            danger
+            onClick={closeModal}
+          >
+            {t('announcementSettings.leaveConfirmDiscard')}
+          </Button>,
+          <Button
+            key="draft"
+            loading={savingDraft}
+            onClick={handleSaveDraft}
+            style={{ background: '#faad14', borderColor: '#faad14', color: '#fff' }}
+          >
+            {t('announcementSettings.leaveConfirmDraft')}
+          </Button>,
+          <Button
+            key="continue"
+            type="primary"
+            onClick={() => setLeaveConfirmOpen(false)}
+            style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
+          >
+            {t('announcementSettings.leaveConfirmContinue')}
+          </Button>,
+        ]}
+        centered
+        width={420}
+      >
+        <p>{t('announcementSettings.leaveConfirmMessage')}</p>
       </Modal>
     </div>
   );

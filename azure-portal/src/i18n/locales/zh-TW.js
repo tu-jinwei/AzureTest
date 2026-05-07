@@ -108,6 +108,7 @@ const zhTW = {
     usageStats: '統計報表',
     userManagement: '使用者管理',
     auditLogs: '稽核日誌',
+    countryManagement: '國家管理',
   },
 
   // ===== 首頁 =====
@@ -288,6 +289,15 @@ const zhTW = {
     allCountries: '全部國家',
     createdAllCountries: '已成功發布到 {count} 個國家',
     someCountriesFailed: '部分國家發布失敗：{countries}',
+    // 離開確認視窗
+    leaveConfirmTitle: '尚有未儲存的變更',
+    leaveConfirmMessage: '您填寫的內容尚未儲存，請選擇要如何處理：',
+    leaveConfirmDiscard: '取消編輯',
+    leaveConfirmDraft: '存為草稿',
+    leaveConfirmContinue: '繼續編輯',
+    savedAsDraft: '已儲存為草稿',
+    saveDraftFailed: '儲存草稿失敗，請稍後再試',
+    draftDefaultSubject: '（未命名草稿）',
   },
 
   // ===== Agent 權限設定 =====
@@ -593,6 +603,37 @@ const zhTW = {
     entityFile: '檔案「{filename}」含 {count} 個敏感資訊（{types}）',
     understood: '我知道了',
     scanFailed: '檔案安全性檢查失敗，請稍後再試',
+  },
+
+  // ===== 國家管理 =====
+  countryManagement: {
+    title: '國家管理',
+    addCountry: '新增國家',
+    editCountry: '編輯國家',
+    codeLabel: '國家代碼',
+    codePlaceholder: '如：TW、JP',
+    codeHint: '2~5 個大寫英文字母，建立後不可修改',
+    nameZhLabel: '中文名稱',
+    nameZhPlaceholder: '如：台灣',
+    nameEnLabel: '英文名稱',
+    nameEnPlaceholder: '如：Taiwan',
+    sortOrderLabel: '排序',
+    isActiveLabel: '啟用狀態',
+    active: '啟用',
+    inactive: '停用',
+    confirmDelete: '確定要刪除此國家嗎？此操作無法復原。',
+    confirmDeleteBtn: '確定刪除',
+    createSuccess: '國家新增成功',
+    updateSuccess: '國家更新成功',
+    deleteSuccess: '國家刪除成功',
+    createFailed: '新增失敗',
+    updateFailed: '更新失敗',
+    deleteFailed: '刪除失敗',
+    codeRequired: '請輸入國家代碼',
+    nameZhRequired: '請輸入中文名稱',
+    nameEnRequired: '請輸入英文名稱',
+    noCountries: '尚無國家資料',
+    dbHint: '注意：新增國家後，需由 DevOps 在 .env 設定對應的 DB 連線，該國家才能正常運作。',
   },
 };
 
