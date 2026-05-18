@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
 import { Table, Button, Modal, Form, Input, Select, Upload, Popconfirm, Tag, message, Space, Spin, Divider, Tooltip, Segmented, Dropdown, Empty, Checkbox, Switch, Alert } from 'antd';
 import { PlusOutlined, DeleteOutlined, UploadOutlined, DatabaseOutlined, UserOutlined, GlobalOutlined, FolderAddOutlined, FolderOutlined, EditOutlined, PaperClipOutlined, CloudUploadOutlined, PictureOutlined, InboxOutlined, FileTextOutlined, SearchOutlined, MoreOutlined, HomeOutlined } from '@ant-design/icons';
 import { libraryAPI, piiAPI, userAPI } from '../../services/api';
@@ -58,6 +58,8 @@ const LibrarySettings = () => {
   const [imageUploading, setImageUploading] = useState(false);
   const [existingImageUrl, setExistingImageUrl] = useState(null);
   const [piiScanning, setPiiScanning] = useState(false);
+  const [uploadLeaveConfirmOpen, setUploadLeaveConfirmOpen] = useState(false);
+  const uploadInitialFormValuesRef = useRef(null);
   const [permSearch, setPermSearch] = useState('');
   const [permRestricted, setPermRestricted] = useState(false); // 是否啟用存取限制
   const [realUserList, setRealUserList] = useState([]);
@@ -177,20 +179,55 @@ const LibrarySettings = () => {
     } finally { setAddCatalogLoading(false); }
   };
 
+  // ===== 上傳 Modal 離開確認相關 =====
+  const closeUploadModal = () => {
+    setUploadModal(false);
+    setUploadLeaveConfirmOpen(false);
+    form.resetFields();
+    uploadInitialFormValuesRef.current = null;
+  };
+
+  const hasUploadFormData = () => {
+    const values = form.getFieldsValue();
+    const initial = uploadInitialFormValuesRef.current || {};
+    const name = (values.name || '').trim();
+    const description = (values.description || '').trim();
+    const libraryName = values.libraryName || '';
+    const fileList = values.file?.fileList || [];
+    const initName = (initial.name || '').trim();
+    const initDescription = (initial.description || '').trim();
+    const initLibraryName = initial.libraryName || '';
+    if (fileList.length > 0) return true;
+    return name !== initName || description !== initDescription || libraryName !== initLibraryName;
+  };
+
+  const handleUploadCancel = () => {
+    if (hasUploadFormData()) {
+      setUploadLeaveConfirmOpen(true);
+    } else {
+      closeUploadModal();
+    }
+  };
+
   const handleOpenUpload = () => {
     form.resetFields();
     if (isSuperAdmin) {
-      form.setFieldsValue({ target_country: displayCountry });
-      fetchModalLibraries(displayCountry);
+      // 若目前 displayCountry 有值就預設選該國家，否則預設選「全部國家」
+      const defaultCountry = displayCountry || 'ALL';
+      form.setFieldsValue({ target_country: defaultCountry });
+      fetchModalLibraries(defaultCountry === 'ALL' ? undefined : defaultCountry);
     } else {
       setModalCatalogs(catalogs);
     }
+    // 記錄初始值（新增模式全空）
+    uploadInitialFormValuesRef.current = { name: '', description: '', libraryName: '' };
     setUploadModal(true);
   };
 
   const handleModalCountryChange = (v) => {
     form.setFieldsValue({ target_country: v, libraryName: undefined });
-    fetchModalLibraries(v);
+    // 'ALL' 代表全部國家，不傳 country 參數給 API
+    fetchModalLibraries(v === 'ALL' ? undefined : v);
   };
 
   const handleUpload = async () => {
@@ -206,15 +243,20 @@ const LibrarySettings = () => {
       const fileList = v.file?.fileList || [];
       if (fileList.length > 0) fd.append('file', fileList[0].originFileObj);
       const p = { library_name: v.libraryName, name: v.name, description: v.description || '' };
-      if (canSelectCountry && v.target_country) p.country = v.target_country;
+      // 'ALL' 代表全部國家，不傳 country 參數
+      if (canSelectCountry && v.target_country && v.target_country !== 'ALL') p.country = v.target_country;
       await libraryAPI.upload(fd, { params: p });
       message.success(t('librarySettings.documentUploaded'));
-      setUploadModal(false);
-      form.resetFields();
+      closeUploadModal();
       fetchLibrary(effectiveCountry);
     } catch (e) {
       if (e.errorFields) return;
-      message.error(t('librarySettings.uploadFailed') + ': ' + (e.response?.data?.detail || e.message));
+      const detail = e.response?.data?.detail || e.message || '';
+      if (typeof detail === 'string' && detail.includes('不存在') && detail.includes('國家')) {
+        message.error(t('librarySettings.countryDbNotConfigured'));
+      } else {
+        message.error(t('librarySettings.uploadFailed') + ': ' + detail);
+      }
     } finally { setUploadLoading(false); }
   };
 
@@ -528,11 +570,10 @@ const LibrarySettings = () => {
 
   const columns = [
     {
-      title: t('librarySettings.libraryName'), dataIndex: 'libraryName', key: 'libraryName', width: 220,
-      ellipsis: true,
+      title: t('librarySettings.libraryName'), dataIndex: 'libraryName', key: 'libraryName',
       render: (name) => (
-        <Tag color="blue" style={{ cursor: 'pointer', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={() => setDocFilterLibrary(name)}>
-          <FolderOutlined style={{ marginRight: 4 }} />{name}
+        <Tag color="blue" style={{ cursor: 'pointer', whiteSpace: 'normal', wordBreak: 'break-word', display: 'inline-flex', alignItems: 'center' }} onClick={() => setDocFilterLibrary(name)}>
+          <FolderOutlined style={{ marginRight: 4, flexShrink: 0 }} />{name}
         </Tag>
       ),
     },
@@ -805,7 +846,7 @@ const LibrarySettings = () => {
       <Modal
         title={t('librarySettings.uploadDocument')}
         open={uploadModal}
-        onCancel={() => { setUploadModal(false); form.resetFields(); }}
+        onCancel={handleUploadCancel}
         onOk={handleUpload}
         confirmLoading={uploadLoading}
         okText={piiScanning ? t('pii.scanningFiles') : t('common.upload')}
@@ -825,7 +866,15 @@ const LibrarySettings = () => {
             >
               <Select
                 placeholder={t('announcementSettings.targetCountryPlaceholder')}
-                options={countries.map((c) => ({ value: c.code, label: (t('countries.' + c.code) || c.name) + ' (' + c.code + ')' }))}
+                options={[
+                  { value: 'ALL', label: t('announcementSettings.allCountries') },
+                  ...countries.map((c) => {
+                    const translated = t('countries.' + c.code);
+                    // t() 找不到翻譯時回傳 key 本身（如 'countries.CTP'），需偵測並 fallback 到 c.name
+                    const displayName = translated.startsWith('countries.') ? (c.name || c.code) : translated;
+                    return { value: c.code, label: displayName + ' (' + c.code + ')' };
+                  }),
+                ]}
                 onChange={handleModalCountryChange}
               />
             </Form.Item>
@@ -1242,6 +1291,34 @@ const LibrarySettings = () => {
             </div>
           )}
         </div>
+      </Modal>
+
+      {/* Upload Leave Confirm Modal */}
+      <Modal
+        title={t('librarySettings.leaveConfirmTitle')}
+        open={uploadLeaveConfirmOpen}
+        onCancel={() => setUploadLeaveConfirmOpen(false)}
+        footer={[
+          <Button
+            key="discard"
+            danger
+            onClick={closeUploadModal}
+          >
+            {t('librarySettings.leaveConfirmDiscard')}
+          </Button>,
+          <Button
+            key="continue"
+            type="primary"
+            onClick={() => setUploadLeaveConfirmOpen(false)}
+            style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
+          >
+            {t('librarySettings.leaveConfirmContinue')}
+          </Button>,
+        ]}
+        centered
+        width={420}
+      >
+        <p>{t('librarySettings.leaveConfirmMessage')}</p>
       </Modal>
     </div>
   );

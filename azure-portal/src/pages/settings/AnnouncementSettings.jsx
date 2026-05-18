@@ -652,7 +652,11 @@ const AnnouncementSettings = () => {
                 options={[
                   // 「全部國家」僅在新增模式下顯示（編輯時各國公告 ID 不同，不支援批次）
                   ...(!editingItem ? [{ value: 'ALL', label: t('announcementSettings.allCountries') }] : []),
-                  ...countries.map((c) => ({ value: c.code, label: `${t(`countries.${c.code}`) || c.name} (${c.code})` })),
+                  ...countries.map((c) => {
+                    const translated = t(`countries.${c.code}`);
+                    const displayName = translated.startsWith('countries.') ? (c.name || c.code) : translated;
+                    return { value: c.code, label: `${displayName} (${c.code})` };
+                  }),
                 ]}
               />
             </Form.Item>

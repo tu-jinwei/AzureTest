@@ -422,6 +422,13 @@ const zhTW = {
     editLibraryDocsTitle: '館內文件',
     editLibraryNoDocuments: '此館目前沒有文件',
     editLibraryDeleteDocConfirm: '確定要刪除文件「{name}」嗎？',
+    // 國家 DB 未設定錯誤
+    countryDbNotConfigured: '此國家尚未設定資料庫，請聯繫 DevOps 進行設定後再試。',
+    // 離開確認視窗
+    leaveConfirmTitle: '尚有未儲存的變更',
+    leaveConfirmMessage: '您填寫的內容尚未上傳，確定要離開嗎？',
+    leaveConfirmDiscard: '取消編輯',
+    leaveConfirmContinue: '繼續編輯',
   },
 
   // ===== 使用者管理 =====

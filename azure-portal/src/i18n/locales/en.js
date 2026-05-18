@@ -421,6 +421,13 @@ const en = {
     editLibraryDocsTitle: 'Documents in this library',
     editLibraryNoDocuments: 'No documents in this library',
     editLibraryDeleteDocConfirm: 'Are you sure you want to delete document "{name}"?',
+    // Country DB not configured error
+    countryDbNotConfigured: 'The database for this country has not been configured. Please contact DevOps to set it up before retrying.',
+    // Leave confirm dialog
+    leaveConfirmTitle: 'Unsaved Changes',
+    leaveConfirmMessage: 'Your changes have not been uploaded. Are you sure you want to leave?',
+    leaveConfirmDiscard: 'Discard',
+    leaveConfirmContinue: 'Keep Editing',
   },
 
   // ===== User Management =====
