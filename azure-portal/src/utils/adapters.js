@@ -174,7 +174,8 @@ export function adaptCatalog(apiData) {
   if (!apiData) return null;
   return {
     catalogId: apiData.catalog_id,
-    name: apiData.library_name ?? '',
+    // 新 API 回傳 catalog_name，舊 API 回傳 library_name，兩者相容
+    name: apiData.catalog_name ?? apiData.library_name ?? '',
     description: apiData.description ?? '',
     imageUrl: apiData.image_url ?? null,
     docCount: apiData.doc_count ?? 0,
@@ -212,6 +213,8 @@ export function adaptLibraryDoc(apiData) {
   if (!apiData) return null;
 
   const files = Array.isArray(apiData.files) ? apiData.files : [];
+  // 新 API 回傳 catalog_name，舊 API 回傳 library_name，兩者相容
+  const libName = apiData.catalog_name ?? apiData.library_name ?? '';
 
   return {
     id: apiData.doc_id,
@@ -221,10 +224,10 @@ export function adaptLibraryDoc(apiData) {
     pdfUrl: apiData.file_url || '#',
     hasFile: !!apiData.file_url || files.length > 0, // 是否有上傳檔案
     files, // 多檔案資訊陣列 [{ filename, relative_path, file_size }]
-    libraryName: apiData.library_name ?? '', // 所屬館名（供首頁顯示）
+    libraryName: libName, // 所屬館名（供首頁顯示）
     createdAt: apiData.created_at ?? null, // 建立時間
     auth_rules: apiData.auth_rules ?? {}, // 存取控制規則（authorized_users, authorized_roles, exception_list）
-    _libraryName: apiData.library_name ?? '', // 內部欄位，供 adaptLibraryDocs 分組用
+    _libraryName: libName, // 內部欄位，供 adaptLibraryDocs 分組用
   };
 }
 

@@ -131,7 +131,7 @@ class AnnouncementResponse(BaseModel):
     updated_at: Optional[datetime] = None
 
 
-# ===== 圖書館 =====
+# ===== 圖書館（Local DB，向後相容保留） =====
 class LibraryCatalogCreate(BaseModel):
     library_name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
@@ -177,6 +177,132 @@ class LibraryDocResponse(BaseModel):
     file_url: Optional[str] = None
     files: List[Dict[str, Any]] = []
     auth_rules: Dict[str, Any] = {}
+    created_at: Optional[datetime] = None
+
+
+# ===== 全域圖書館（Global DB） =====
+
+class AuthRules(BaseModel):
+    """存取授權規則"""
+    authorized_roles: List[str] = []
+    authorized_users: List[str] = []
+    exception_list: List[str] = []
+
+
+class DistributionRule(BaseModel):
+    """單一國家的分發規則"""
+    country_code: str = Field(..., min_length=2, max_length=5)
+    catalog_name: str = Field(default='', max_length=255)
+    auth_rules: AuthRules = Field(default_factory=AuthRules)
+    is_active: bool = True
+
+
+class DistributionRuleResponse(BaseModel):
+    """分發規則回應（含 id）"""
+    id: str
+    doc_id: str
+    country_code: str
+    catalog_name: str
+    auth_rules: Dict[str, Any] = {}
+    is_active: bool = True
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class GlobalDocCreate(BaseModel):
+    """建立全域文件（不含檔案，檔案透過 multipart 上傳）"""
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    distributions: List[DistributionRule] = Field(
+        default=[],
+        description="分發規則清單，每個國家一筆"
+    )
+
+
+class GlobalDocUpdate(BaseModel):
+    """更新全域文件資訊"""
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class GlobalDocResponse(BaseModel):
+    """全域文件回應（含分發規則）"""
+    doc_id: str
+    name: str
+    description: Optional[str] = None
+    file_url: Optional[str] = None
+    files: List[Dict[str, Any]] = []
+    metadata: Dict[str, Any] = {}
+    uploaded_by: Optional[str] = None
+    is_active: bool = True
+    distributions: List[DistributionRuleResponse] = []
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class GlobalDocListResponse(BaseModel):
+    """全域文件列表項目（精簡版，不含完整分發規則）"""
+    doc_id: str
+    name: str
+    description: Optional[str] = None
+    file_url: Optional[str] = None
+    files: List[Dict[str, Any]] = []
+    uploaded_by: Optional[str] = None
+    is_active: bool = True
+    distribution_countries: List[str] = []   # 已分發的國家代碼清單
+    distribution_catalogs: List[str] = []    # 已分發的館名清單（去重）
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class GlobalCatalogCreate(BaseModel):
+    """建立全域館"""
+    catalog_name: str = Field(..., min_length=1, max_length=255)
+    country_code: str = Field(..., min_length=2, max_length=5, description="所屬國家代碼")
+    description: Optional[str] = None
+
+
+class GlobalCatalogUpdate(BaseModel):
+    """更新全域館"""
+    catalog_name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+
+
+class GlobalCatalogResponse(BaseModel):
+    """全域館回應"""
+    catalog_id: str
+    catalog_name: str
+    country_code: str = ''      # 所屬國家代碼
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    doc_count: int = 0          # 分發到此館的文件數
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+# 使用者端查詢用（各國使用者看到的文件格式）
+class UserLibraryDocResponse(BaseModel):
+    """使用者端圖書館文件回應（從 Global DB 查詢，依分發規則過濾）"""
+    doc_id: str
+    name: str
+    description: Optional[str] = None
+    file_url: Optional[str] = None
+    files: List[Dict[str, Any]] = []
+    catalog_name: str           # 在本國的館名
+    country_code: str           # 本國代碼
+    auth_rules: Dict[str, Any] = {}  # 本國的存取規則
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class UserLibraryCatalogResponse(BaseModel):
+    """使用者端館目錄回應（本國有文件的館）"""
+    catalog_id: str
+    catalog_name: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    doc_count: int = 0          # 本國此館的文件數
     created_at: Optional[datetime] = None
 
 

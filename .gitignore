@@ -58,6 +58,14 @@ CTBC portal.txt
 資料庫設計.md
 *.xlsx
 *.docx
+*.pptx
 generate_spec_docx.py
 CTBC_AI_Portal_業務功能規格書v1.0.md
 generate_role_permissions_excel.py
+do_patch_v2.py
+generate_axon_manual_docx.py
+generate_axon_manual.py
+generate_axon_spec_docx.py
+generate_system_design_docx_v2.py
+patch_docx_v2.py
+patch_original_to_v2.py

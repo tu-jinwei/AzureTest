@@ -1,72 +1,154 @@
 import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
-import { Table, Button, Modal, Form, Input, Select, Upload, Popconfirm, Tag, message, Space, Spin, Divider, Tooltip, Segmented, Dropdown, Empty, Checkbox, Switch, Alert } from 'antd';
-import { PlusOutlined, DeleteOutlined, UploadOutlined, DatabaseOutlined, UserOutlined, GlobalOutlined, FolderAddOutlined, FolderOutlined, EditOutlined, PaperClipOutlined, CloudUploadOutlined, PictureOutlined, InboxOutlined, FileTextOutlined, SearchOutlined, MoreOutlined, HomeOutlined } from '@ant-design/icons';
-import { libraryAPI, piiAPI, userAPI } from '../../services/api';
-import { adaptLibraryDocs, adaptCatalogs } from '../../utils/adapters';
-import { libraries as mockLibraries, userList as mockUserList } from '../../data/mockData';
+import {
+  Table, Button, Modal, Form, Input, Select, Upload, Popconfirm,
+  Tag, message, Space, Spin, Divider, Tooltip, Segmented, Dropdown,
+  Empty, Checkbox, Switch,
+} from 'antd';
+import {
+  DeleteOutlined, UploadOutlined, DatabaseOutlined,
+  GlobalOutlined, FolderAddOutlined, FolderOutlined,
+  EditOutlined, PaperClipOutlined, CloudUploadOutlined, PictureOutlined,
+  FileTextOutlined, SearchOutlined, MoreOutlined,
+  SendOutlined,
+} from '@ant-design/icons';
+import { globalLibraryAPI, piiAPI, userAPI } from '../../services/api';
 import { useCountry } from '../../contexts/CountryContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import '../Settings.css';
 
-const CatalogCoverImage = memo(({ catalogId, country }) => {
+// ─── 全域館封面圖片元件 ───────────────────────────────────────────────────────
+const CatalogCoverImage = memo(({ catalogId }) => {
   const [src, setSrc] = useState(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let url = null, cancelled = false;
     setLoading(true);
-    libraryAPI.getCatalogImage(catalogId, country)
+    globalLibraryAPI.getCatalogImage(catalogId)
       .then((res) => { if (!cancelled) { url = URL.createObjectURL(res.data); setSrc(url); } })
       .catch(() => { if (!cancelled) setSrc(null); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
-  }, [catalogId, country]);
+  }, [catalogId]);
   if (loading) return <div className="catalog-card-img-placeholder"><Spin size="small" /></div>;
   if (!src) return <div className="catalog-card-img-placeholder"><PictureOutlined style={{ fontSize: 36, color: '#d9d9d9' }} /></div>;
   return <img src={src} alt="cover" className="catalog-card-img" />;
 });
 CatalogCoverImage.displayName = 'CatalogCoverImage';
 
+// ─── 分發規則列（單一國家設定）────────────────────────────────────────────────
+const DistributionRow = ({ rule, catalogOptionsByCountry, countries, onRemove, onChange, userListByCountry, userListLoading, t }) => {
+  // 取得此 row 對應國家的使用者列表
+  const userList = userListByCountry?.[rule.country_code] || [];
+  const countryLabel = (() => {
+    const c = countries.find((x) => x.code === rule.country_code);
+    if (!c) return rule.country_code;
+    const translated = t('countries.' + c.code);
+    return translated.startsWith('countries.') ? (c.name_zh || c.name_en || c.code) : translated;
+  })();
+  // 根據此 row 的 country_code 取得對應的館名選項
+  const catalogOptions = (catalogOptionsByCountry || {})[rule.country_code] || [];
+
+  return (
+    <div style={{ border: '1px solid #e8e8e8', borderRadius: 8, padding: '12px 16px', marginBottom: 10, background: '#fafafa' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <Space>
+          <GlobalOutlined style={{ color: 'var(--primary-color)' }} />
+          <span style={{ fontWeight: 600 }}>{countryLabel} ({rule.country_code})</span>
+          <Switch
+            size="small"
+            checked={rule.is_active}
+            onChange={(v) => onChange({ ...rule, is_active: v })}
+            checkedChildren={t('librarySettings.distributionActive')}
+            unCheckedChildren="停用"
+          />
+        </Space>
+        <Button type="text" danger icon={<DeleteOutlined />} size="small" onClick={onRemove} />
+      </div>
+
+      {/* 館名選擇 */}
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>{t('librarySettings.distributionCatalog')}</div>
+        <Select
+          value={rule.catalog_name || undefined}
+          onChange={(v) => onChange({ ...rule, catalog_name: v })}
+          options={catalogOptions}
+          placeholder={t('librarySettings.libraryNamePlaceholder')}
+          style={{ width: '100%' }}
+          showSearch
+        />
+      </div>
+
+      {/* 存取規則 */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <div style={{ fontSize: 12, color: '#666' }}>{t('librarySettings.enableAccessRestriction')}</div>
+          <Switch
+            size="small"
+            checked={rule._restricted}
+            onChange={(v) => onChange({
+              ...rule,
+              _restricted: v,
+              auth_rules: v ? rule.auth_rules : { authorized_roles: [], authorized_users: [], exception_list: [] },
+            })}
+            checkedChildren="限定"
+            unCheckedChildren="公開"
+          />
+        </div>
+        {rule._restricted && (
+          <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid #d9d9d9', borderRadius: 6, padding: '4px 0', background: '#fff' }}>
+            {userListLoading ? (
+              <div style={{ textAlign: 'center', padding: '12px 0' }}><Spin size="small" /></div>
+            ) : userList.filter((u) => u.role !== 'root').map((u) => (
+              <label key={u.email} style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', cursor: 'pointer', userSelect: 'none' }}>
+                <Checkbox
+                  checked={(rule.auth_rules?.authorized_users || []).includes(u.email)}
+                  style={{ marginRight: 8 }}
+                  onChange={(e) => {
+                    const prev = rule.auth_rules?.authorized_users || [];
+                    const next = e.target.checked ? [...prev, u.email] : prev.filter((em) => em !== u.email);
+                    onChange({ ...rule, auth_rules: { ...rule.auth_rules, authorized_users: next } });
+                  }}
+                />
+                <span style={{ flex: 1, fontSize: 13 }}>{u.name || u.email}</span>
+                <span style={{ fontSize: 11, color: '#999' }}>{u.email}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── 主元件 ──────────────────────────────────────────────────────────────────
 const LibrarySettings = () => {
-  const { effectiveCountry, countries, isSuperAdmin, displayCountry } = useCountry();
-  // isSuperAdmin 已包含 root 和 admin，都可以選擇國家上傳
-  const canSelectCountry = isSuperAdmin;
+  const { countries } = useCountry();
   const { t } = useLanguage();
-  const [libraries, setLibraries] = useState([]);
-  const [catalogs, setCatalogs] = useState([]);
+
+  // ── 資料狀態 ──
+  const [catalogs, setCatalogs] = useState([]);       // 當前國家的館清單
+  const [allCatalogs, setAllCatalogs] = useState([]); // 所有國家的館清單（供分發 Modal 用）
+  const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [uploadModal, setUploadModal] = useState(false);
-  const [uploadLoading, setUploadLoading] = useState(false);
-  const [permModal, setPermModal] = useState(null);
-  const [permUsers, setPermUsers] = useState([]);
-  const [form] = Form.useForm();
+
+  // ── Tab ──
   const [activeTab, setActiveTab] = useState('catalogs');
   const [catalogSearch, setCatalogSearch] = useState('');
+  const [catalogCountry, setCatalogCountry] = useState(''); // 館名管理 Tab 的國家篩選
   const [docSearch, setDocSearch] = useState('');
-  const [docFilterLibrary, setDocFilterLibrary] = useState(null);
+  const [docFilterCatalog, setDocFilterCatalog] = useState(null);
+
+  // ── 新增館 Modal ──
   const [addCatalogModal, setAddCatalogModal] = useState(false);
   const [addCatalogName, setAddCatalogName] = useState('');
+  const [addCatalogDesc, setAddCatalogDesc] = useState('');
+  const [addCatalogCountry, setAddCatalogCountry] = useState(''); // 新增館的國家
   const [addCatalogLoading, setAddCatalogLoading] = useState(false);
-  const [modalCatalogs, setModalCatalogs] = useState([]);
-  const [modalLibLoading, setModalLibLoading] = useState(false);
-  const [editModal, setEditModal] = useState(null);
-  const [editLoading, setEditLoading] = useState(false);
-  const [editForm] = Form.useForm();
-  const [editFileList, setEditFileList] = useState([]);
-  const [imageModal, setImageModal] = useState(null);
-  const [imageFileList, setImageFileList] = useState([]);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [imageUploading, setImageUploading] = useState(false);
-  const [existingImageUrl, setExistingImageUrl] = useState(null);
-  const [piiScanning, setPiiScanning] = useState(false);
-  const [uploadLeaveConfirmOpen, setUploadLeaveConfirmOpen] = useState(false);
-  const uploadInitialFormValuesRef = useRef(null);
-  const [permSearch, setPermSearch] = useState('');
-  const [permRestricted, setPermRestricted] = useState(false); // 是否啟用存取限制
-  const [realUserList, setRealUserList] = useState([]);
-  const [userListLoading, setUserListLoading] = useState(false);
-  // 編輯館 Modal 狀態
-  const [editCatalogModal, setEditCatalogModal] = useState(null); // 目前編輯的 catalog
+
+  // ── 編輯館 Modal ──
+  const [editCatalogModal, setEditCatalogModal] = useState(null);
   const [editCatalogName, setEditCatalogName] = useState('');
+  const [editCatalogDesc, setEditCatalogDesc] = useState('');
   const [editCatalogLoading, setEditCatalogLoading] = useState(false);
   const [editCatalogImageFileList, setEditCatalogImageFileList] = useState([]);
   const [editCatalogImagePreview, setEditCatalogImagePreview] = useState(null);
@@ -75,6 +157,85 @@ const LibrarySettings = () => {
   const [editCatalogDocs, setEditCatalogDocs] = useState([]);
   const [editCatalogDocsLoading, setEditCatalogDocsLoading] = useState(false);
 
+  // ── 上傳文件 Modal ──
+  const [uploadModal, setUploadModal] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [piiScanning, setPiiScanning] = useState(false);
+  const [uploadLeaveConfirmOpen, setUploadLeaveConfirmOpen] = useState(false);
+  const uploadInitialFormValuesRef = useRef(null);
+  const [form] = Form.useForm();
+  const [distributions, setDistributions] = useState([]);
+
+  // ── 編輯文件 Modal ──
+  const [editModal, setEditModal] = useState(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editFileList, setEditFileList] = useState([]);
+  const [editForm] = Form.useForm();
+
+  // ── 分發規則 Modal ──
+  const [distModal, setDistModal] = useState(null);
+  const [distRules, setDistRules] = useState([]);
+  const [distLoading, setDistLoading] = useState(false);
+  const [distSaving, setDistSaving] = useState(false);
+
+  // ── 使用者清單（按國家分組）──
+  const [userListByCountry, setUserListByCountry] = useState({}); // { TW: [...], JP: [...] }
+  const [userListLoading, setUserListLoading] = useState(false);
+
+  // ─── 資料載入 ────────────────────────────────────────────────────────────
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [allCatRes, docRes] = await Promise.all([
+        globalLibraryAPI.listCatalogs(),   // 所有館（供分發 Modal 用）
+        globalLibraryAPI.listDocs(),
+      ]);
+      const allCats = Array.isArray(allCatRes.data) ? allCatRes.data : [];
+      setAllCatalogs(allCats);
+      setDocs(Array.isArray(docRes.data) ? docRes.data : []);
+    } catch (err) {
+      console.warn('fetchData error', err);
+      message.error('載入資料失敗');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // 依 catalogCountry 篩選館清單
+  useEffect(() => {
+    if (!catalogCountry) {
+      setCatalogs(allCatalogs);
+    } else {
+      setCatalogs(allCatalogs.filter((c) => c.country_code === catalogCountry));
+    }
+  }, [allCatalogs, catalogCountry]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const fetchUserList = useCallback(async () => {
+    // 若所有國家都已載入則跳過
+    const loadedCodes = Object.keys(userListByCountry);
+    const allCodes = countries.map((c) => c.code);
+    if (allCodes.length > 0 && allCodes.every((code) => loadedCodes.includes(code))) return;
+
+    setUserListLoading(true);
+    try {
+      // 並行載入每個國家的使用者
+      const results = await Promise.all(
+        allCodes.map((code) =>
+          userAPI.list({ country: code })
+            .then((res) => {
+              const users = Array.isArray(res.data) ? res.data : (res.data?.users || res.data?.items || []);
+              return [code, users];
+            })
+            .catch(() => [code, []])
+        )
+      );
+      setUserListByCountry(Object.fromEntries(results));
+    } catch { /* ignore */ } finally { setUserListLoading(false); }
+  }, [userListByCountry, countries]);
+
+  // ─── PII 掃描 ─────────────────────────────────────────────────────────────
   const handlePiiScan = async (newFileList, setListFn) => {
     if (!newFileList || newFileList.length === 0) return true;
     const exts = ['.pdf', '.doc', '.docx', '.txt', '.csv'];
@@ -111,333 +272,63 @@ const LibrarySettings = () => {
     } catch { return true; } finally { setPiiScanning(false); }
   };
 
-  const fetchLibrary = async (country) => {
-    setLoading(true);
-    try {
-      const [docsRes, catRes] = await Promise.all([
-        libraryAPI.listAll(country),
-        libraryAPI.listCatalogs(country).catch(() => ({ data: [] })),
-      ]);
-      let cats = adaptCatalogs(catRes.data);
-      const libs = adaptLibraryDocs(docsRes.data, cats.length > 0 ? cats : undefined);
-      if (cats.length === 0 && libs.length > 0) {
-        cats = libs.map((lib) => ({ catalogId: lib.id, name: lib.name, description: '', docCount: lib.documents.length, createdAt: null }));
-      }
-      setCatalogs(cats);
-      setLibraries(libs);
-    } catch (err) {
-      console.warn('API fail', err);
-      setLibraries(mockLibraries);
-      setCatalogs([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchLibrary(effectiveCountry); }, [effectiveCountry]);
-
-  const fetchModalLibraries = useCallback(async (country) => {
-    setModalLibLoading(true);
-    try {
-      const cats = adaptCatalogs((await libraryAPI.listCatalogs(isSuperAdmin ? country : undefined)).data);
-      if (cats.length > 0) setModalCatalogs(cats);
-      else {
-        const fb = libraries.map((l) => ({ catalogId: l.id, name: l.name, docCount: l.documents.length }));
-        setModalCatalogs(fb.length > 0 ? fb : catalogs);
-      }
-    } catch {
-      const fb = libraries.map((l) => ({ catalogId: l.id, name: l.name, docCount: l.documents.length }));
-      setModalCatalogs(fb.length > 0 ? fb : catalogs);
-    } finally { setModalLibLoading(false); }
-  }, [isSuperAdmin, catalogs, libraries]);
-
-  const allDocs = libraries.flatMap((lib) => lib.documents.map((doc) => ({ ...doc, libraryName: lib.name, libraryId: lib.id })));
-
-  const filteredDocs = allDocs.filter((d) => {
-    if (docFilterLibrary && d.libraryName !== docFilterLibrary) return false;
-    if (!docSearch.trim()) return true;
-    const kw = docSearch.toLowerCase();
-    return d.name?.toLowerCase().includes(kw) || d.description?.toLowerCase().includes(kw) || d.libraryName?.toLowerCase().includes(kw);
-  });
-
-  const filteredCatalogs = catalogs.filter((c) => !catalogSearch.trim() || c.name?.toLowerCase().includes(catalogSearch.toLowerCase()));
-  const libraryStats = catalogs.map((c) => ({ catalogId: c.catalogId, name: c.name, imageUrl: c.imageUrl || null, docCount: c.docCount ?? 0 }));
+  // ─── 館管理 ───────────────────────────────────────────────────────────────
+  const catalogOptions = catalogs.map((c) => ({ value: c.catalog_name, label: c.catalog_name }));
 
   const handleAddCatalog = async () => {
     const n = addCatalogName.trim();
-    if (!n) return;
-    if (catalogs.some((c) => c.name === n)) { message.warning(t('librarySettings.libraryExists')); return; }
+    if (!n) { message.warning(t('librarySettings.documentNameRequired')); return; }
+    if (!addCatalogCountry) { message.warning(t('librarySettings.catalogCountryRequired')); return; }
+    // 同一國家內不可重複
+    if (allCatalogs.some((c) => c.catalog_name === n && c.country_code === addCatalogCountry)) {
+      message.warning(t('librarySettings.libraryExists')); return;
+    }
     setAddCatalogLoading(true);
     try {
-      await libraryAPI.createCatalog({ library_name: n }, isSuperAdmin ? effectiveCountry : undefined);
+      await globalLibraryAPI.createCatalog({ catalog_name: n, country_code: addCatalogCountry, description: addCatalogDesc.trim() });
       message.success(t('librarySettings.libraryAdded', { name: n }));
       setAddCatalogModal(false);
       setAddCatalogName('');
-      fetchLibrary(effectiveCountry);
+      setAddCatalogDesc('');
+      setAddCatalogCountry('');
+      fetchData();
     } catch (e) {
       message.error(t('librarySettings.addLibraryFailed') + ': ' + (e.response?.data?.detail || e.message));
     } finally { setAddCatalogLoading(false); }
   };
 
-  // ===== 上傳 Modal 離開確認相關 =====
-  const closeUploadModal = () => {
-    setUploadModal(false);
-    setUploadLeaveConfirmOpen(false);
-    form.resetFields();
-    uploadInitialFormValuesRef.current = null;
-  };
-
-  const hasUploadFormData = () => {
-    const values = form.getFieldsValue();
-    const initial = uploadInitialFormValuesRef.current || {};
-    const name = (values.name || '').trim();
-    const description = (values.description || '').trim();
-    const libraryName = values.libraryName || '';
-    const fileList = values.file?.fileList || [];
-    const initName = (initial.name || '').trim();
-    const initDescription = (initial.description || '').trim();
-    const initLibraryName = initial.libraryName || '';
-    if (fileList.length > 0) return true;
-    return name !== initName || description !== initDescription || libraryName !== initLibraryName;
-  };
-
-  const handleUploadCancel = () => {
-    if (hasUploadFormData()) {
-      setUploadLeaveConfirmOpen(true);
-    } else {
-      closeUploadModal();
-    }
-  };
-
-  const handleOpenUpload = () => {
-    form.resetFields();
-    if (isSuperAdmin) {
-      // 若目前 displayCountry 有值就預設選該國家，否則預設選「全部國家」
-      const defaultCountry = displayCountry || 'ALL';
-      form.setFieldsValue({ target_country: defaultCountry });
-      fetchModalLibraries(defaultCountry === 'ALL' ? undefined : defaultCountry);
-    } else {
-      setModalCatalogs(catalogs);
-    }
-    // 記錄初始值（新增模式全空）
-    uploadInitialFormValuesRef.current = { name: '', description: '', libraryName: '' };
-    setUploadModal(true);
-  };
-
-  const handleModalCountryChange = (v) => {
-    form.setFieldsValue({ target_country: v, libraryName: undefined });
-    // 'ALL' 代表全部國家，不傳 country 參數給 API
-    fetchModalLibraries(v === 'ALL' ? undefined : v);
-  };
-
-  const handleUpload = async () => {
-    // 如果 PII 掃描還在進行中，阻止上傳
-    if (piiScanning) {
-      message.warning(t('pii.scanningFiles'));
-      return;
-    }
-    try {
-      const v = await form.validateFields();
-      setUploadLoading(true);
-      const fd = new FormData();
-      const fileList = v.file?.fileList || [];
-      if (fileList.length > 0) fd.append('file', fileList[0].originFileObj);
-      const p = { library_name: v.libraryName, name: v.name, description: v.description || '' };
-      // 'ALL' 代表全部國家，不傳 country 參數
-      if (canSelectCountry && v.target_country && v.target_country !== 'ALL') p.country = v.target_country;
-      await libraryAPI.upload(fd, { params: p });
-      message.success(t('librarySettings.documentUploaded'));
-      closeUploadModal();
-      fetchLibrary(effectiveCountry);
-    } catch (e) {
-      if (e.errorFields) return;
-      const detail = e.response?.data?.detail || e.message || '';
-      if (typeof detail === 'string' && detail.includes('不存在') && detail.includes('國家')) {
-        message.error(t('librarySettings.countryDbNotConfigured'));
-      } else {
-        message.error(t('librarySettings.uploadFailed') + ': ' + detail);
-      }
-    } finally { setUploadLoading(false); }
-  };
-
-  const handleDelete = async (id) => {
-    try {
-      if (isSuperAdmin && effectiveCountry) await libraryAPI.delete(id, { params: { country: effectiveCountry } });
-      else await libraryAPI.delete(id);
-      message.success(t('librarySettings.documentDeleted'));
-      fetchLibrary(effectiveCountry);
-    } catch (e) { message.error(t('librarySettings.deleteFailed') + ': ' + (e.response?.data?.detail || e.message)); }
-  };
-
-  const handleOpenEdit = (doc) => {
-    setEditModal(doc);
-    setEditFileList([]);
-    editForm.setFieldsValue({ name: doc.name, description: doc.description, libraryName: doc.libraryName });
-  };
-
-  const handleEditSave = async () => {
-    if (!editModal) return;
-    // 如果 PII 掃描還在進行中，阻止儲存
-    if (piiScanning) {
-      message.warning(t('pii.scanningFiles'));
-      return;
-    }
-    try {
-      const v = await editForm.validateFields();
-      setEditLoading(true);
-      const cp = isSuperAdmin ? effectiveCountry : undefined;
-      const ud = {};
-      if (v.name !== editModal.name) ud.name = v.name;
-      if (v.description !== editModal.description) ud.description = v.description;
-      if (v.libraryName !== editModal.libraryName) ud.library_name = v.libraryName;
-      if (Object.keys(ud).length > 0) await libraryAPI.update(editModal.id, ud, cp);
-      if (editFileList.length > 0) {
-        const fd = new FormData();
-        fd.append('file', editFileList[0].originFileObj || editFileList[0]);
-        try {
-          await libraryAPI.uploadFile(editModal.id, fd, cp);
-          message.success(t('librarySettings.documentUploaded'));
-        } catch (ue) {
-          message.warning(t('librarySettings.appendUploadFailed') + ': ' + (ue.response?.data?.detail || ue.message));
-        }
-      }
-      message.success(t('librarySettings.documentUpdated'));
-      setEditModal(null);
-      setEditFileList([]);
-      editForm.resetFields();
-      fetchLibrary(effectiveCountry);
-    } catch (e) {
-      if (e.errorFields) return;
-      message.error(t('librarySettings.updateFailed') + ': ' + (e.response?.data?.detail || e.message));
-    } finally { setEditLoading(false); }
-  };
-
-  const handleDeleteFile = async (docId, fn) => {
-    try {
-      await libraryAPI.deleteFile(docId, fn, isSuperAdmin ? effectiveCountry : undefined);
-      message.success(t('librarySettings.attachmentDeleted', { name: fn }));
-      setEditModal((p) => p ? { ...p, files: p.files.filter((f) => f.filename !== fn) } : p);
-      fetchLibrary(effectiveCountry);
-    } catch (e) { message.error(t('librarySettings.attachmentDeleteFailed') + ': ' + (e.response?.data?.detail || e.message)); }
-  };
-
-  const openPermModal = async (doc) => {
-    // 先取得最新資料，再開啟 modal（避免 async 覆蓋使用者操作）
-    setUserListLoading(true);
-    try {
-      // 同時取得最新 doc 資料（確保 auth_rules 是最新的）和使用者列表
-      const [docsRes, usersRes] = await Promise.allSettled([
-        libraryAPI.listAll(isSuperAdmin ? effectiveCountry : undefined),
-        userAPI.list(isSuperAdmin ? { country: effectiveCountry } : {}),
-      ]);
-
-      // 從最新資料中找到對應的 doc，取得最新的 auth_rules
-      let existing = doc.auth_rules?.authorized_users || [];
-      if (docsRes.status === 'fulfilled') {
-        const latestDocs = Array.isArray(docsRes.value.data) ? docsRes.value.data : [];
-        const latestDoc = latestDocs.find((d) => d.doc_id === doc.id);
-        existing = latestDoc?.auth_rules?.authorized_users || [];
-      }
-      setPermUsers(existing);
-      setPermRestricted(existing.length > 0);
-
-      // 設定使用者列表
-      if (usersRes.status === 'fulfilled') {
-        const users = Array.isArray(usersRes.value.data) ? usersRes.value.data : (usersRes.value.data?.users || usersRes.value.data?.items || []);
-        setRealUserList(users.length > 0 ? users : mockUserList);
-      } else {
-        setRealUserList(mockUserList);
-      }
-    } catch {
-      const existing = doc.auth_rules?.authorized_users || [];
-      setPermUsers(existing);
-      setPermRestricted(existing.length > 0);
-      setRealUserList(mockUserList);
-    } finally {
-      setUserListLoading(false);
-      // 資料準備好後才開啟 modal
-      setPermModal(doc);
-    }
-  };
-
-  const handlePermSave = async () => {
-    if (!permModal) return;
-    // 若開啟限制但未選任何人，阻止儲存
-    if (permRestricted && permUsers.length === 0) {
-      message.warning('請至少選擇一位使用者，或關閉存取限制開關');
-      return;
-    }
-    // 若關閉限制開關，送空陣列 = 公開給所有人
-    const usersToSave = permRestricted ? permUsers : [];
-    try {
-      await libraryAPI.updateAuth(permModal.id, { authorized_roles: [], authorized_users: usersToSave, exception_list: [] });
-      message.success(t('librarySettings.permissionUpdated'));
-      setPermModal(null);
-      setPermSearch('');
-      setPermRestricted(false);
-      fetchLibrary(effectiveCountry);
-    } catch (e) {
-      const detail = e.response?.data?.detail;
-      const errMsg = Array.isArray(detail)
-        ? detail.map((d) => d.msg || JSON.stringify(d)).join(', ')
-        : (detail || e.message);
-      message.error(t('librarySettings.updateFailed') + ': ' + errMsg);
-    }
-  };
-
-  const handleDeleteLibrary = async (name) => {
-    try {
-      await libraryAPI.deleteLibrary(name, isSuperAdmin ? effectiveCountry : undefined);
-      message.success(t('librarySettings.libraryDeleted', { name }));
-      fetchLibrary(effectiveCountry);
-    } catch (e) { message.error(t('librarySettings.deleteFailed') + ': ' + (e.response?.data?.detail || e.message)); }
-  };
-
-  // ===== 編輯館 Modal =====
   const handleOpenEditCatalog = async (cat) => {
     setEditCatalogModal(cat);
-    setEditCatalogName(cat.name);
+    setEditCatalogName(cat.catalog_name);
+    setEditCatalogDesc(cat.description || '');
     setEditCatalogImageFileList([]);
     setEditCatalogImagePreview(null);
     setEditCatalogExistingImageUrl(null);
     setEditCatalogDocs([]);
 
-    // 載入封面圖片
-    if (cat.imageUrl) {
+    if (cat.image_url) {
       try {
-        const r = await libraryAPI.getCatalogImage(cat.catalogId, isSuperAdmin ? effectiveCountry : undefined);
+        const r = await globalLibraryAPI.getCatalogImage(cat.catalog_id);
         setEditCatalogExistingImageUrl(URL.createObjectURL(r.data));
       } catch { /* ignore */ }
     }
 
-    // 載入館內文件
     setEditCatalogDocsLoading(true);
     try {
-      const docsRes = await libraryAPI.listAll(isSuperAdmin ? effectiveCountry : undefined);
-      const docs = Array.isArray(docsRes.data) ? docsRes.data : [];
-      setEditCatalogDocs(docs.filter((d) => d.library_name === cat.name));
+      const res = await globalLibraryAPI.listDocs({ catalog_name: cat.catalog_name });
+      setEditCatalogDocs(Array.isArray(res.data) ? res.data : []);
     } catch {
-      setEditCatalogDocs(
-        libraries.find((l) => l.name === cat.name)?.documents?.map((d) => ({
-          doc_id: d.id,
-          name: d.name,
-          library_name: cat.name,
-        })) || []
-      );
-    } finally {
-      setEditCatalogDocsLoading(false);
-    }
+      setEditCatalogDocs(docs.filter((d) => (d.distribution_catalogs || []).includes(cat.catalog_name)));
+    } finally { setEditCatalogDocsLoading(false); }
   };
 
   const handleCloseEditCatalog = () => {
     setEditCatalogModal(null);
     setEditCatalogName('');
+    setEditCatalogDesc('');
     setEditCatalogImageFileList([]);
     setEditCatalogImagePreview(null);
-    if (editCatalogExistingImageUrl) {
-      URL.revokeObjectURL(editCatalogExistingImageUrl);
-      setEditCatalogExistingImageUrl(null);
-    }
+    if (editCatalogExistingImageUrl) { URL.revokeObjectURL(editCatalogExistingImageUrl); setEditCatalogExistingImageUrl(null); }
     setEditCatalogDocs([]);
   };
 
@@ -445,30 +336,50 @@ const LibrarySettings = () => {
     if (!editCatalogModal) return;
     const newName = editCatalogName.trim();
     if (!newName) { message.warning(t('librarySettings.editLibraryNameRequired')); return; }
-    if (newName !== editCatalogModal.name && catalogs.some((c) => c.name === newName && c.catalogId !== editCatalogModal.catalogId)) {
-      message.warning(t('librarySettings.editLibraryNameExists'));
-      return;
+    if (newName !== editCatalogModal.catalog_name && catalogs.some((c) => c.catalog_name === newName && c.catalog_id !== editCatalogModal.catalog_id)) {
+      message.warning(t('librarySettings.editLibraryNameExists')); return;
     }
     setEditCatalogLoading(true);
     try {
       const updateData = {};
-      if (newName !== editCatalogModal.name) updateData.library_name = newName;
+      if (newName !== editCatalogModal.catalog_name) updateData.catalog_name = newName;
+      if (editCatalogDesc.trim() !== (editCatalogModal.description || '')) updateData.description = editCatalogDesc.trim();
       if (Object.keys(updateData).length > 0) {
-        await libraryAPI.updateCatalog(editCatalogModal.catalogId, updateData, isSuperAdmin ? effectiveCountry : undefined);
+        await globalLibraryAPI.updateCatalog(editCatalogModal.catalog_id, updateData);
       }
-      // 上傳新封面圖片
       if (editCatalogImageFileList.length > 0) {
         const fd = new FormData();
         fd.append('file', editCatalogImageFileList[0].originFileObj);
-        await libraryAPI.uploadCatalogImage(editCatalogModal.catalogId, fd, isSuperAdmin ? effectiveCountry : undefined);
+        await globalLibraryAPI.uploadCatalogImage(editCatalogModal.catalog_id, fd);
       }
       message.success(t('librarySettings.editLibrarySaved', { name: newName }));
       handleCloseEditCatalog();
-      fetchLibrary(effectiveCountry);
+      fetchData();
     } catch (e) {
       message.error(t('librarySettings.editLibrarySaveFailed') + ': ' + (e.response?.data?.detail || e.message));
-    } finally {
-      setEditCatalogLoading(false);
+    } finally { setEditCatalogLoading(false); }
+  };
+
+  const handleDeleteCatalog = async (cat) => {
+    try {
+      await globalLibraryAPI.deleteCatalog(cat.catalog_id);
+      message.success(t('librarySettings.libraryDeleted', { name: cat.catalog_name }));
+      fetchData();
+    } catch (e) {
+      message.error(t('librarySettings.deleteFailed') + ': ' + (e.response?.data?.detail || e.message));
+    }
+  };
+
+  const handleEditCatalogDeleteImage = async () => {
+    if (!editCatalogModal) return;
+    try {
+      await globalLibraryAPI.deleteCatalogImage(editCatalogModal.catalog_id);
+      message.success(t('librarySettings.coverImageDeleted'));
+      if (editCatalogExistingImageUrl) { URL.revokeObjectURL(editCatalogExistingImageUrl); setEditCatalogExistingImageUrl(null); }
+      setEditCatalogModal((prev) => prev ? { ...prev, image_url: null } : prev);
+      fetchData();
+    } catch (e) {
+      message.error(t('librarySettings.coverImageDeleteFailed') + ': ' + (e.response?.data?.detail || e.message));
     }
   };
 
@@ -478,112 +389,304 @@ const LibrarySettings = () => {
     try {
       const fd = new FormData();
       fd.append('file', editCatalogImageFileList[0].originFileObj);
-      await libraryAPI.uploadCatalogImage(editCatalogModal.catalogId, fd, isSuperAdmin ? effectiveCountry : undefined);
+      await globalLibraryAPI.uploadCatalogImage(editCatalogModal.catalog_id, fd);
       message.success(t('librarySettings.coverImageUploaded'));
       setEditCatalogImageFileList([]);
       setEditCatalogImagePreview(null);
-      // 重新載入圖片
       try {
-        const r = await libraryAPI.getCatalogImage(editCatalogModal.catalogId, isSuperAdmin ? effectiveCountry : undefined);
+        const r = await globalLibraryAPI.getCatalogImage(editCatalogModal.catalog_id);
         if (editCatalogExistingImageUrl) URL.revokeObjectURL(editCatalogExistingImageUrl);
         setEditCatalogExistingImageUrl(URL.createObjectURL(r.data));
-        // 同步更新 editCatalogModal 的 imageUrl 標記
-        setEditCatalogModal((prev) => prev ? { ...prev, imageUrl: 'updated' } : prev);
+        setEditCatalogModal((prev) => prev ? { ...prev, image_url: 'updated' } : prev);
       } catch { /* ignore */ }
-      fetchLibrary(effectiveCountry);
+      fetchData();
     } catch (e) {
       message.error(t('librarySettings.coverImageUploadFailed') + ': ' + (e.response?.data?.detail || e.message));
-    } finally {
-      setEditCatalogImageUploading(false);
+    } finally { setEditCatalogImageUploading(false); }
+  };
+
+  // ─── 上傳文件 Modal ───────────────────────────────────────────────────────
+  const hasUploadFormData = () => {
+    const values = form.getFieldsValue();
+    const initial = uploadInitialFormValuesRef.current || {};
+    return (values.name || '').trim() !== (initial.name || '').trim()
+      || (values.description || '').trim() !== (initial.description || '').trim()
+      || (values.file?.fileList || []).length > 0
+      || distributions.length > 0;
+  };
+
+  const closeUploadModal = () => {
+    setUploadModal(false);
+    setUploadLeaveConfirmOpen(false);
+    form.resetFields();
+    setDistributions([]);
+    uploadInitialFormValuesRef.current = null;
+  };
+
+  const handleUploadCancel = () => {
+    if (hasUploadFormData()) setUploadLeaveConfirmOpen(true);
+    else closeUploadModal();
+  };
+
+  const handleOpenUpload = () => {
+    form.resetFields();
+    setDistributions([]);
+    uploadInitialFormValuesRef.current = { name: '', description: '' };
+    fetchUserList();
+    setUploadModal(true);
+  };
+
+  const handleToggleDistInUpload = (countryCode, checked) => {
+    if (checked) {
+      if (distributions.some((d) => d.country_code === countryCode)) return;
+      setDistributions((prev) => [...prev, {
+        country_code: countryCode,
+        catalog_name: '',
+        auth_rules: { authorized_roles: [], authorized_users: [], exception_list: [] },
+        is_active: true,
+        _restricted: false,
+      }]);
+    } else {
+      setDistributions((prev) => prev.filter((d) => d.country_code !== countryCode));
     }
   };
 
-  const handleEditCatalogDeleteImage = async () => {
-    if (!editCatalogModal) return;
+  const handleUpload = async () => {
+    if (piiScanning) { message.warning(t('pii.scanningFiles')); return; }
+    const missing = distributions.filter((r) => !r.catalog_name);
+    if (missing.length > 0) {
+      message.warning(t('librarySettings.distributionCatalogRequired', { countries: missing.map((r) => r.country_code).join(', ') }));
+      return;
+    }
     try {
-      await libraryAPI.deleteCatalogImage(editCatalogModal.catalogId, isSuperAdmin ? effectiveCountry : undefined);
-      message.success(t('librarySettings.coverImageDeleted'));
-      if (editCatalogExistingImageUrl) {
-        URL.revokeObjectURL(editCatalogExistingImageUrl);
-        setEditCatalogExistingImageUrl(null);
-      }
-      setEditCatalogModal((prev) => prev ? { ...prev, imageUrl: null } : prev);
-      fetchLibrary(effectiveCountry);
-    } catch (e) {
-      message.error(t('librarySettings.coverImageDeleteFailed') + ': ' + (e.response?.data?.detail || e.message));
-    }
-  };
-
-  const handleEditCatalogDeleteDoc = async (docId, docName) => {
-    try {
-      if (isSuperAdmin && effectiveCountry) await libraryAPI.delete(docId, { params: { country: effectiveCountry } });
-      else await libraryAPI.delete(docId);
-      message.success(t('librarySettings.documentDeleted'));
-      setEditCatalogDocs((prev) => prev.filter((d) => d.doc_id !== docId));
-      fetchLibrary(effectiveCountry);
-    } catch (e) {
-      message.error(t('librarySettings.deleteFailed') + ': ' + (e.response?.data?.detail || e.message));
-    }
-  };
-
-  const handleOpenImageModal = async (cat) => {
-    setImageModal(cat); setImageFileList([]); setImagePreview(null); setExistingImageUrl(null);
-    if (cat.imageUrl) {
-      try {
-        const r = await libraryAPI.getCatalogImage(cat.catalogId, isSuperAdmin ? effectiveCountry : undefined);
-        setExistingImageUrl(URL.createObjectURL(r.data));
-      } catch { /* ignore */ }
-    }
-  };
-
-  const handleCloseImageModal = () => {
-    setImageModal(null); setImageFileList([]); setImagePreview(null);
-    if (existingImageUrl) { URL.revokeObjectURL(existingImageUrl); setExistingImageUrl(null); }
-  };
-
-  const handleUploadImage = async () => {
-    if (!imageModal || imageFileList.length === 0) return;
-    setImageUploading(true);
-    try {
+      const v = await form.validateFields();
+      setUploadLoading(true);
       const fd = new FormData();
-      fd.append('file', imageFileList[0].originFileObj);
-      await libraryAPI.uploadCatalogImage(imageModal.catalogId, fd, isSuperAdmin ? effectiveCountry : undefined);
-      message.success(t('librarySettings.coverImageUploaded'));
-      handleCloseImageModal();
-      fetchLibrary(effectiveCountry);
-    } catch (e) { message.error(t('librarySettings.coverImageUploadFailed') + ': ' + (e.response?.data?.detail || e.message)); }
-    finally { setImageUploading(false); }
+      fd.append('name', v.name);
+      fd.append('description', v.description || '');
+      const fileList = v.file?.fileList || [];
+      if (fileList.length > 0) fd.append('file', fileList[0].originFileObj);
+      const distPayload = distributions.map(({ country_code, catalog_name, auth_rules, is_active }) => ({
+        country_code, catalog_name, auth_rules, is_active,
+      }));
+      fd.append('distributions', JSON.stringify(distPayload));
+      await globalLibraryAPI.upload(fd);
+      message.success(t('librarySettings.documentUploaded'));
+      closeUploadModal();
+      fetchData();
+    } catch (e) {
+      if (e.errorFields) return;
+      message.error(t('librarySettings.uploadFailed') + ': ' + (e.response?.data?.detail || e.message));
+    } finally { setUploadLoading(false); }
   };
 
-  const handleDeleteImage = async () => {
-    if (!imageModal) return;
+  const fileUploadValueHandler = (e) => {
+    if (!e || !e.fileList) return e;
+    const latestFile = e.fileList.slice(-1);
+    const fileSize = latestFile[0]?.originFileObj?.size || latestFile[0]?.size || 0;
+    if (fileSize > 100 * 1024 * 1024) {
+      message.error(t('librarySettings.fileSizeExceeded', { size: (fileSize / 1024 / 1024).toFixed(1) }));
+      return { fileList: [] };
+    }
+    if (latestFile.length > 0) {
+      handlePiiScan(latestFile, () => form.setFieldsValue({ file: { fileList: [] } }));
+    }
+    return { fileList: latestFile };
+  };
+
+  // ─── 編輯文件 Modal ───────────────────────────────────────────────────────
+  const handleOpenEdit = (doc) => {
+    setEditModal(doc);
+    setEditFileList([]);
+    editForm.setFieldsValue({ name: doc.name, description: doc.description });
+  };
+
+  const handleEditSave = async () => {
+    if (!editModal) return;
+    if (piiScanning) { message.warning(t('pii.scanningFiles')); return; }
     try {
-      await libraryAPI.deleteCatalogImage(imageModal.catalogId, isSuperAdmin ? effectiveCountry : undefined);
-      message.success(t('librarySettings.coverImageDeleted'));
-      handleCloseImageModal();
-      fetchLibrary(effectiveCountry);
-    } catch (e) { message.error(t('librarySettings.coverImageDeleteFailed') + ': ' + (e.response?.data?.detail || e.message)); }
+      const v = await editForm.validateFields();
+      setEditLoading(true);
+      const ud = {};
+      if (v.name !== editModal.name) ud.name = v.name;
+      if (v.description !== editModal.description) ud.description = v.description;
+      if (Object.keys(ud).length > 0) await globalLibraryAPI.updateDoc(editModal.doc_id, ud);
+      if (editFileList.length > 0) {
+        // 替換模式：先刪除所有舊檔，再上傳新檔
+        const existingFiles = editModal.files || [];
+        for (const f of existingFiles) {
+          try { await globalLibraryAPI.deleteFile(editModal.doc_id, f.filename); } catch { /* ignore */ }
+        }
+        const fd = new FormData();
+        fd.append('file', editFileList[0].originFileObj || editFileList[0]);
+        try {
+          await globalLibraryAPI.uploadFile(editModal.doc_id, fd);
+        } catch (ue) {
+          message.warning(t('librarySettings.appendUploadFailed') + ': ' + (ue.response?.data?.detail || ue.message));
+        }
+      }
+      message.success(t('librarySettings.documentUpdated'));
+      setEditModal(null);
+      setEditFileList([]);
+      editForm.resetFields();
+      fetchData();
+    } catch (e) {
+      if (e.errorFields) return;
+      message.error(t('librarySettings.updateFailed') + ': ' + (e.response?.data?.detail || e.message));
+    } finally { setEditLoading(false); }
   };
 
-  const editLibraryOptions = catalogs.map((c) => ({ value: c.name, label: c.name }));
-  const modalLibraryOptions = modalCatalogs.map((c) => ({ value: c.name, label: c.name }));
+  const handleDeleteFile = async (docId, fn) => {
+    try {
+      await globalLibraryAPI.deleteFile(docId, fn);
+      message.success(t('librarySettings.attachmentDeleted', { name: fn }));
+      setEditModal((p) => p ? { ...p, files: (p.files || []).filter((f) => f.filename !== fn) } : p);
+      fetchData();
+    } catch (e) { message.error(t('librarySettings.attachmentDeleteFailed') + ': ' + (e.response?.data?.detail || e.message)); }
+  };
 
+  const handleDeleteDoc = async (docId) => {
+    try {
+      await globalLibraryAPI.deleteDoc(docId);
+      message.success(t('librarySettings.documentDeleted'));
+      fetchData();
+    } catch (e) { message.error(t('librarySettings.deleteFailed') + ': ' + (e.response?.data?.detail || e.message)); }
+  };
+
+  // ─── 分發規則 Modal ───────────────────────────────────────────────────────
+  const handleOpenDist = async (doc) => {
+    setDistModal(doc);
+    setDistLoading(true);
+    fetchUserList();
+    try {
+      const res = await globalLibraryAPI.getDistributions(doc.doc_id);
+      const rules = (Array.isArray(res.data) ? res.data : []).map((r) => ({
+        ...r,
+        _restricted: (r.auth_rules?.authorized_users || []).length > 0,
+      }));
+      setDistRules(rules);
+    } catch {
+      setDistRules([]);
+    } finally { setDistLoading(false); }
+  };
+
+  const handleToggleDist2 = (countryCode, checked) => {
+    if (checked) {
+      if (distRules.some((d) => d.country_code === countryCode)) return;
+      setDistRules((prev) => [...prev, {
+        country_code: countryCode,
+        catalog_name: '',
+        auth_rules: { authorized_roles: [], authorized_users: [], exception_list: [] },
+        is_active: true,
+        _restricted: false,
+      }]);
+    } else {
+      setDistRules((prev) => prev.filter((d) => d.country_code !== countryCode));
+    }
+  };
+
+  const handleSaveDist = async () => {
+    if (!distModal) return;
+    const missing = distRules.filter((r) => !r.catalog_name);
+    if (missing.length > 0) {
+      message.warning(t('librarySettings.distributionCatalogRequired', { countries: missing.map((r) => r.country_code).join(', ') }));
+      return;
+    }
+    setDistSaving(true);
+    try {
+      const payload = distRules.map(({ country_code, catalog_name, auth_rules, is_active }) => ({
+        country_code, catalog_name, auth_rules, is_active,
+      }));
+      await globalLibraryAPI.updateDistributions(distModal.doc_id, payload);
+      message.success(t('librarySettings.distributionUpdated'));
+      setDistModal(null);
+      setDistRules([]);
+      fetchData();
+    } catch (e) {
+      message.error(t('librarySettings.distributionUpdateFailed') + ': ' + (e.response?.data?.detail || e.message));
+    } finally { setDistSaving(false); }
+  };
+
+  // ─── 計算資料 ─────────────────────────────────────────────────────────────
+  const filteredCatalogs = catalogs.filter((c) =>
+    !catalogSearch.trim() || c.catalog_name?.toLowerCase().includes(catalogSearch.toLowerCase())
+  );
+
+  const filteredDocs = docs.filter((d) => {
+    if (docFilterCatalog) {
+      const inCatalog = (d.distribution_catalogs || []).includes(docFilterCatalog);
+      if (!inCatalog) return false;
+    }
+    if (!docSearch.trim()) return true;
+    const kw = docSearch.toLowerCase();
+    return d.name?.toLowerCase().includes(kw) || d.description?.toLowerCase().includes(kw);
+  });
+
+  const usedCountriesInDist = distRules.map((r) => r.country_code);
+  const usedCountriesInUpload = distributions.map((r) => r.country_code);
+
+  const countrySelectOptions = countries.map((c) => {
+    const translated = t('countries.' + c.code);
+    const displayName = translated.startsWith('countries.') ? (c.name_zh || c.name_en || c.code) : translated;
+    return { value: c.code, label: `${displayName} (${c.code})` };
+  });
+
+  // 按 country_code 分組的館名選項（供 DistributionRow 使用）
+  const catalogOptionsByCountry = allCatalogs.reduce((acc, cat) => {
+    const code = cat.country_code || '';
+    if (!acc[code]) acc[code] = [];
+    acc[code].push({ value: cat.catalog_name, label: cat.catalog_name });
+    return acc;
+  }, {});
+
+  // ─── 文件表格欄位 ─────────────────────────────────────────────────────────
   const columns = [
     {
-      title: t('librarySettings.libraryName'), dataIndex: 'libraryName', key: 'libraryName',
-      render: (name) => (
-        <Tag color="blue" style={{ cursor: 'pointer', whiteSpace: 'normal', wordBreak: 'break-word', display: 'inline-flex', alignItems: 'center' }} onClick={() => setDocFilterLibrary(name)}>
-          <FolderOutlined style={{ marginRight: 4, flexShrink: 0 }} />{name}
-        </Tag>
+      title: t('librarySettings.documentName'), dataIndex: 'name', key: 'name', ellipsis: true,
+      render: (name, r) => (
+        <div>
+          <div style={{ fontWeight: 500 }}>{name}</div>
+          {r.description && <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{r.description}</div>}
+        </div>
       ),
     },
-    { title: t('librarySettings.documentName'), dataIndex: 'name', key: 'name', ellipsis: true },
     {
-      title: t('common.files'), dataIndex: 'hasFile', key: 'hasFile', width: 120,
-      render: (hasFile, r) => {
-        const fc = r.files?.length || 0;
-        return hasFile
-          ? <Tag color="green">{t('librarySettings.fileUploaded')}{fc > 1 ? ' (' + fc + ')' : ''}</Tag>
+      title: t('librarySettings.distributedCountries'), key: 'distributions', width: 200,
+      render: (_, r) => {
+        const codes = r.distribution_countries || [];
+        if (codes.length === 0) return <Tag color="default">{t('librarySettings.noDistributedCountries')}</Tag>;
+        if (codes.length <= 3) {
+          return (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {codes.map((code) => (
+                <Tag key={code} color="blue" style={{ margin: 0 }}>{code}</Tag>
+              ))}
+            </div>
+          );
+        }
+        // 4 個以上：顯示「X 個國家」，hover 顯示所有國家名稱
+        const tooltipContent = codes.map((code) => {
+          const c = countries.find((x) => x.code === code);
+          if (!c) return code;
+          const translated = t('countries.' + code);
+          const name = translated.startsWith('countries.') ? (c.name_zh || c.name_en || code) : translated;
+          return `${name} (${code})`;
+        }).join('、');
+        return (
+          <Tooltip title={tooltipContent} placement="topLeft">
+            <Tag color="blue" style={{ cursor: 'default' }}>
+              {codes.length} {t('librarySettings.countriesCount')}
+            </Tag>
+          </Tooltip>
+        );
+      },
+    },
+    {
+      title: t('common.files'), key: 'files', width: 100,
+      render: (_, r) => {
+        const fc = (r.files || []).length;
+        return fc > 0
+          ? <Tag color="green">{t('librarySettings.fileUploaded')}{fc > 1 ? ` (${fc})` : ''}</Tag>
           : <Tag color="default">{t('librarySettings.fileNotUploaded')}</Tag>;
       },
     },
@@ -594,13 +697,14 @@ const LibrarySettings = () => {
           menu={{
             items: [
               { key: 'edit', icon: <EditOutlined />, label: t('common.edit'), onClick: () => handleOpenEdit(r) },
-              { key: 'perm', icon: <UserOutlined />, label: t('common.permissions'), onClick: () => openPermModal(r) },
+              { key: 'dist', icon: <SendOutlined />, label: t('librarySettings.distributionSettings'), onClick: () => handleOpenDist(r) },
               { type: 'divider' },
               {
                 key: 'del', icon: <DeleteOutlined />, label: t('common.delete'), danger: true,
                 onClick: () => Modal.confirm({
                   title: t('librarySettings.deleteDocument'),
-                  onOk: () => handleDelete(r.id),
+                  content: t('librarySettings.deleteDocumentHint'),
+                  onOk: () => handleDeleteDoc(r.doc_id),
                   okText: t('common.delete'),
                   cancelText: t('common.cancel'),
                   okButtonProps: { danger: true },
@@ -617,20 +721,7 @@ const LibrarySettings = () => {
     },
   ];
 
-  const fileUploadValueHandler = (e) => {
-    if (!e || !e.fileList) return e;
-    const latestFile = e.fileList.slice(-1);
-    const fileSize = latestFile[0]?.originFileObj?.size || latestFile[0]?.size || 0;
-    if (fileSize > 100 * 1024 * 1024) {
-      message.error(t('librarySettings.fileSizeExceeded', { size: (fileSize / 1024 / 1024).toFixed(1) }));
-      return { fileList: [] };
-    }
-    if (latestFile.length > 0) {
-      handlePiiScan(latestFile, (cleared) => { form.setFieldsValue({ file: { fileList: cleared } }); });
-    }
-    return { fileList: latestFile };
-  };
-
+  // ─── 渲染 ─────────────────────────────────────────────────────────────────
   return (
     <div className="settings-page">
       <div className="settings-header">
@@ -661,7 +752,7 @@ const LibrarySettings = () => {
                 <span className="lib-tab-label">
                   <FileTextOutlined style={{ marginRight: 6 }} />
                   {t('librarySettings.documentManagement')}
-                  <Tag className="lib-tab-count" color={activeTab === 'documents' ? 'blue' : 'default'}>{allDocs.length}</Tag>
+                  <Tag className="lib-tab-count" color={activeTab === 'documents' ? 'blue' : 'default'}>{docs.length}</Tag>
                 </span>
               ),
             },
@@ -674,27 +765,30 @@ const LibrarySettings = () => {
       <div className="lib-tab-content">
         <Spin spinning={loading} tip={t('common.loading')}>
           {activeTab === 'catalogs' ? (
+            /* ── 館管理 Tab ── */
             <div className="catalog-view">
               <div className="lib-toolbar">
-                <Input
-                  placeholder={t('librarySettings.searchLibraryPlaceholder')}
-                  prefix={<SearchOutlined style={{ color: '#bbb' }} />}
-                  value={catalogSearch}
-                  onChange={(e) => setCatalogSearch(e.target.value)}
-                  allowClear
-                  className="lib-toolbar-search"
-                />
+                <div className="lib-toolbar-filters">
+                  <Input
+                    placeholder={t('librarySettings.searchLibraryPlaceholder')}
+                    prefix={<SearchOutlined style={{ color: '#bbb' }} />}
+                    value={catalogSearch}
+                    onChange={(e) => setCatalogSearch(e.target.value)}
+                    allowClear
+                    className="lib-toolbar-search"
+                  />
+                  <Select
+                    value={catalogCountry || undefined}
+                    onChange={(v) => setCatalogCountry(v || '')}
+                    placeholder={t('librarySettings.filterByCountry')}
+                    allowClear
+                    style={{ width: 160 }}
+                    options={countrySelectOptions}
+                  />
+                </div>
                 <Button
                   type="primary"
-                  icon={
-                    <span role="img" className="anticon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10.5z" />
-                        <line x1="12" y1="9" x2="12" y2="17" />
-                        <line x1="8" y1="13" x2="16" y2="13" />
-                      </svg>
-                    </span>
-                  }
+                  icon={<FolderAddOutlined />}
                   onClick={() => setAddCatalogModal(true)}
                   style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
                 >
@@ -706,79 +800,87 @@ const LibrarySettings = () => {
                 <Empty description={catalogSearch ? t('common.noData') : t('librarySettings.noCatalogs')} style={{ padding: '60px 0' }} />
               ) : (
                 <div className="catalog-grid">
-                  {filteredCatalogs.map((cat) => {
-                    const stat = libraryStats.find((s) => s.name === cat.name) || cat;
-                    return (
-                      <div key={cat.catalogId || cat.name} className="catalog-card">
-                        <div className="catalog-card-image-area">
-                          {stat.imageUrl ? (
-                            <CatalogCoverImage catalogId={cat.catalogId} country={effectiveCountry} />
-                          ) : (
-                            <div className="catalog-card-img-placeholder">
-                              <PictureOutlined style={{ fontSize: 36, color: '#d9d9d9' }} />
-                            </div>
-                          )}
-                        </div>
-                        <div className="catalog-card-body">
-                          <Tooltip title={cat.name} placement="top">
-                            <div className="catalog-card-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'default', display: 'flex', alignItems: 'center' }}>
-                              <FolderOutlined style={{ marginRight: 6, color: 'var(--primary-color)', flexShrink: 0 }} />
-                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat.name}</span>
-                            </div>
-                          </Tooltip>
-                          <div className="catalog-card-stat">
-                            <Tag color={stat.docCount > 0 ? 'blue' : 'default'}>
-                              {t('librarySettings.documentCount', { count: stat.docCount })}
-                            </Tag>
+                  {filteredCatalogs.map((cat) => (
+                    <div key={cat.catalog_id} className="catalog-card">
+                      <div className="catalog-card-image-area">
+                        {cat.image_url ? (
+                          <CatalogCoverImage catalogId={cat.catalog_id} />
+                        ) : (
+                          <div className="catalog-card-img-placeholder">
+                            <PictureOutlined style={{ fontSize: 36, color: '#d9d9d9' }} />
                           </div>
-                        </div>
-                        <div className="catalog-card-actions">
-                          <Button
-                            type="text"
-                            icon={<EditOutlined />}
-                            onClick={() => handleOpenEditCatalog(stat)}
-                            size="small"
-                            style={{ color: 'var(--primary-color)' }}
-                          >
-                            {t('librarySettings.editLibrary')}
-                          </Button>
-                          {stat.docCount === 0 ? (
-                            <Popconfirm
-                              title={t('librarySettings.deleteLibraryConfirm', { name: cat.name })}
-                              onConfirm={() => handleDeleteLibrary(cat.name)}
-                              okText={t('librarySettings.confirmDelete')}
-                              cancelText={t('common.cancel')}
-                              okButtonProps={{ danger: true }}
-                            >
-                              <Button type="text" danger icon={<DeleteOutlined />} size="small">
-                                {t('librarySettings.deleteLibraryBtn')}
-                              </Button>
-                            </Popconfirm>
-                          ) : (
-                            <Tooltip title={t('librarySettings.deleteLibraryDisabledHint')}>
-                              <Button type="text" icon={<DeleteOutlined />} size="small" disabled style={{ color: '#ccc' }}>
-                                {t('librarySettings.deleteLibraryBtn')}
-                              </Button>
-                            </Tooltip>
+                        )}
+                      </div>
+                      <div className="catalog-card-body">
+                        <Tooltip title={cat.catalog_name} placement="top">
+                          <div className="catalog-card-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'default', display: 'flex', alignItems: 'center' }}>
+                            <FolderOutlined style={{ marginRight: 6, color: 'var(--primary-color)', flexShrink: 0 }} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat.catalog_name}</span>
+                          </div>
+                        </Tooltip>
+                        <div className="catalog-card-stat" style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                          {cat.country_code && (
+                            <Tag color="geekblue" style={{ margin: 0, fontSize: 11 }}>
+                              {(() => {
+                                const c = countries.find((x) => x.code === cat.country_code);
+                                if (!c) return cat.country_code;
+                                const translated = t('countries.' + cat.country_code);
+                                return translated.startsWith('countries.') ? (c.name_zh || c.name_en || cat.country_code) : translated;
+                              })()}
+                            </Tag>
                           )}
+                          <Tag color={(cat.doc_count || 0) > 0 ? 'blue' : 'default'}>
+                            {t('librarySettings.documentCount', { count: cat.doc_count || 0 })}
+                          </Tag>
                         </div>
                       </div>
-                    );
-                  })}
+                      <div className="catalog-card-actions">
+                        <Button
+                          type="text"
+                          icon={<EditOutlined />}
+                          onClick={() => handleOpenEditCatalog(cat)}
+                          size="small"
+                          style={{ color: 'var(--primary-color)' }}
+                        >
+                          {t('librarySettings.editLibrary')}
+                        </Button>
+                        {(cat.doc_count || 0) === 0 ? (
+                          <Popconfirm
+                            title={t('librarySettings.deleteLibraryConfirm', { name: cat.catalog_name })}
+                            onConfirm={() => handleDeleteCatalog(cat)}
+                            okText={t('librarySettings.confirmDelete')}
+                            cancelText={t('common.cancel')}
+                            okButtonProps={{ danger: true }}
+                          >
+                            <Button type="text" danger icon={<DeleteOutlined />} size="small">
+                              {t('librarySettings.deleteLibraryBtn')}
+                            </Button>
+                          </Popconfirm>
+                        ) : (
+                          <Tooltip title={t('librarySettings.deleteLibraryDisabledHint')}>
+                            <Button type="text" icon={<DeleteOutlined />} size="small" disabled style={{ color: '#ccc' }}>
+                              {t('librarySettings.deleteLibraryBtn')}
+                            </Button>
+                          </Tooltip>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           ) : (
+            /* ── 文件管理 Tab ── */
             <div className="document-view">
               <div className="lib-toolbar">
                 <div className="lib-toolbar-filters">
                   <Select
                     placeholder={t('librarySettings.filterByLibrary')}
-                    value={docFilterLibrary}
-                    onChange={setDocFilterLibrary}
+                    value={docFilterCatalog}
+                    onChange={setDocFilterCatalog}
                     allowClear
                     style={{ minWidth: 180 }}
-                    options={catalogs.map((c) => ({ value: c.name, label: c.name }))}
+                    options={catalogOptions}
                   />
                   <Input
                     placeholder={t('librarySettings.searchDocPlaceholder')}
@@ -799,11 +901,11 @@ const LibrarySettings = () => {
                 </Button>
               </div>
 
-              {docFilterLibrary && (
+              {docFilterCatalog && (
                 <div className="lib-filter-tag">
                   <span>{t('librarySettings.filteringBy')}</span>
-                  <Tag closable onClose={() => setDocFilterLibrary(null)} color="blue">
-                    <FolderOutlined style={{ marginRight: 4 }} />{docFilterLibrary}
+                  <Tag closable onClose={() => setDocFilterCatalog(null)} color="blue">
+                    <FolderOutlined style={{ marginRight: 4 }} />{docFilterCatalog}
                   </Tag>
                 </div>
               )}
@@ -811,7 +913,7 @@ const LibrarySettings = () => {
               <Table
                 columns={columns}
                 dataSource={filteredDocs}
-                rowKey="id"
+                rowKey="doc_id"
                 pagination={{ pageSize: 10 }}
                 locale={{ emptyText: t('librarySettings.noDocuments') }}
               />
@@ -820,18 +922,32 @@ const LibrarySettings = () => {
         </Spin>
       </div>
 
-      {/* Add Catalog Modal */}
+      {/* ── 新增館 Modal ── */}
       <Modal
         title={<span><FolderAddOutlined style={{ marginRight: 8 }} />{t('librarySettings.addNewLibrary')}</span>}
         open={addCatalogModal}
-        onCancel={() => { setAddCatalogModal(false); setAddCatalogName(''); }}
+        onCancel={() => { setAddCatalogModal(false); setAddCatalogName(''); setAddCatalogDesc(''); setAddCatalogCountry(''); }}
         onOk={handleAddCatalog}
         confirmLoading={addCatalogLoading}
         okText={t('common.confirm')}
         cancelText={t('common.cancel')}
-        okButtonProps={{ style: { background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }, disabled: !addCatalogName.trim() }}
+        okButtonProps={{ style: { background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }, disabled: !addCatalogName.trim() || !addCatalogCountry }}
       >
         <p style={{ marginBottom: 12, color: '#666' }}>{t('librarySettings.addNewLibraryHint')}</p>
+        {/* 國家選擇 */}
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>
+            {t('librarySettings.catalogCountryLabel')} <span style={{ color: '#ff4d4f' }}>*</span>
+          </div>
+          <Select
+            value={addCatalogCountry || undefined}
+            onChange={(v) => setAddCatalogCountry(v || '')}
+            placeholder={t('librarySettings.catalogCountryPlaceholder')}
+            options={countrySelectOptions}
+            style={{ width: '100%' }}
+            size="large"
+          />
+        </div>
         <Input
           placeholder={t('librarySettings.newLibraryPlaceholder')}
           value={addCatalogName}
@@ -839,12 +955,19 @@ const LibrarySettings = () => {
           onPressEnter={handleAddCatalog}
           prefix={<FolderOutlined style={{ color: '#bbb' }} />}
           size="large"
+          style={{ marginBottom: 10 }}
+        />
+        <Input.TextArea
+          placeholder={t('librarySettings.libraryDescPlaceholder')}
+          value={addCatalogDesc}
+          onChange={(e) => setAddCatalogDesc(e.target.value)}
+          rows={2}
         />
       </Modal>
 
-      {/* Upload Document Modal */}
+      {/* ── 上傳文件 Modal ── */}
       <Modal
-        title={t('librarySettings.uploadDocument')}
+        title={<span><UploadOutlined style={{ marginRight: 8 }} />{t('librarySettings.uploadDocument')}</span>}
         open={uploadModal}
         onCancel={handleUploadCancel}
         onOk={handleUpload}
@@ -856,39 +979,9 @@ const LibrarySettings = () => {
           disabled: piiScanning,
           loading: piiScanning,
         }}
+        width={640}
       >
         <Form form={form} layout="vertical">
-          {canSelectCountry && (
-            <Form.Item
-              name="target_country"
-              label={<span><GlobalOutlined style={{ marginRight: 4 }} />{t('announcementSettings.targetCountry')}</span>}
-              rules={[{ required: true, message: t('announcementSettings.targetCountryRequired') }]}
-            >
-              <Select
-                placeholder={t('announcementSettings.targetCountryPlaceholder')}
-                options={[
-                  { value: 'ALL', label: t('announcementSettings.allCountries') },
-                  ...countries.map((c) => {
-                    const translated = t('countries.' + c.code);
-                    // t() 找不到翻譯時回傳 key 本身（如 'countries.CTP'），需偵測並 fallback 到 c.name
-                    const displayName = translated.startsWith('countries.') ? (c.name || c.code) : translated;
-                    return { value: c.code, label: displayName + ' (' + c.code + ')' };
-                  }),
-                ]}
-                onChange={handleModalCountryChange}
-              />
-            </Form.Item>
-          )}
-          <Form.Item name="libraryName" label={t('librarySettings.libraryName')} rules={[{ required: true, message: t('librarySettings.libraryNameRequired') }]}>
-            <Select
-              placeholder={modalLibLoading ? t('librarySettings.loadingLibraries') : t('librarySettings.libraryNamePlaceholder')}
-              options={modalLibraryOptions}
-              loading={modalLibLoading}
-              showSearch
-              allowClear
-              notFoundContent={modalLibLoading ? <Spin size="small" /> : t('librarySettings.noLibraryForCountry')}
-            />
-          </Form.Item>
           <Form.Item name="name" label={t('librarySettings.documentName')} rules={[{ required: true, message: t('librarySettings.documentNameRequired') }]}>
             <Input placeholder={t('librarySettings.documentNamePlaceholder')} />
           </Form.Item>
@@ -902,22 +995,87 @@ const LibrarySettings = () => {
             extra={piiScanning ? t('pii.scanningFiles') : t('librarySettings.uploadFileHint')}
             getValueFromEvent={fileUploadValueHandler}
           >
-            <Upload
-              maxCount={1}
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp"
-              beforeUpload={() => false}
-            >
+            <Upload maxCount={1} accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp" beforeUpload={() => false}>
               <Button icon={<UploadOutlined />} loading={piiScanning}>
                 {piiScanning ? t('pii.scanningFiles') : t('common.selectFile')}
               </Button>
             </Upload>
           </Form.Item>
+
+          <Divider style={{ margin: '12px 0' }} />
+
+          {/* 分發設定 */}
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
+              <GlobalOutlined style={{ marginRight: 6, color: 'var(--primary-color)' }} />
+              {t('librarySettings.distributionSettings')}
+            </div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>{t('librarySettings.distributionSettingsHint')}</div>
+
+            <div style={{ maxHeight: 360, overflowY: 'auto', paddingRight: 2 }}>
+              {distributions.map((rule, idx) => (
+                <DistributionRow
+                  key={rule.country_code + idx}
+                  rule={rule}
+                  catalogOptionsByCountry={catalogOptionsByCountry}
+                  countries={countries}
+                  userListByCountry={userListByCountry}
+                  userListLoading={userListLoading}
+                  t={t}
+                  onRemove={() => setDistributions((prev) => prev.filter((_, i) => i !== idx))}
+                  onChange={(updated) => setDistributions((prev) => prev.map((r, i) => i === idx ? updated : r))}
+                />
+              ))}
+            </div>
+
+            {/* 國家勾選清單（含全選） */}
+            <div style={{ border: '1px solid #e8e8e8', borderRadius: 8, padding: '8px 12px', background: '#fafafa', marginBottom: 8 }}>
+              {countries.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '8px 0', color: '#bbb', fontSize: 13 }}>{t('common.noData')}</div>
+              ) : (
+                <>
+                  {/* 全選 */}
+                  <div style={{ marginBottom: 6, paddingBottom: 6, borderBottom: '1px solid #e8e8e8' }}>
+                    <Checkbox
+                      checked={usedCountriesInUpload.length === countries.length && countries.length > 0}
+                      indeterminate={usedCountriesInUpload.length > 0 && usedCountriesInUpload.length < countries.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          countries.forEach((c) => handleToggleDistInUpload(c.code, true));
+                        } else {
+                          setDistributions([]);
+                        }
+                      }}
+                    >
+                      <span style={{ fontWeight: 600 }}>{t('common.selectAll') || '全選'}</span>
+                    </Checkbox>
+                  </div>
+                  {countries.map((c) => {
+                    const translated = t('countries.' + c.code);
+                    const displayName = translated.startsWith('countries.') ? (c.name_zh || c.name || c.code) : translated;
+                    const isChecked = usedCountriesInUpload.includes(c.code);
+                    return (
+                      <div key={c.code} style={{ marginBottom: 4 }}>
+                        <Checkbox
+                          checked={isChecked}
+                          onChange={(e) => handleToggleDistInUpload(c.code, e.target.checked)}
+                        >
+                          <span style={{ fontWeight: 500 }}>{displayName}</span>
+                          <span style={{ color: '#999', marginLeft: 6, fontSize: 12 }}>({c.code})</span>
+                        </Checkbox>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+          </div>
         </Form>
       </Modal>
 
-      {/* Edit Document Modal */}
+      {/* ── 編輯文件 Modal ── */}
       <Modal
-        title={t('librarySettings.editDocument')}
+        title={<span><EditOutlined style={{ marginRight: 8 }} />{t('librarySettings.editDocument')}</span>}
         open={!!editModal}
         onCancel={() => { setEditModal(null); setEditFileList([]); editForm.resetFields(); }}
         onOk={handleEditSave}
@@ -932,9 +1090,6 @@ const LibrarySettings = () => {
         width={560}
       >
         <Form form={editForm} layout="vertical">
-          <Form.Item name="libraryName" label={t('librarySettings.libraryName')} rules={[{ required: true, message: t('librarySettings.libraryNameRequired') }]}>
-            <Select placeholder={t('librarySettings.libraryNamePlaceholder')} options={editLibraryOptions} showSearch />
-          </Form.Item>
           <Form.Item name="name" label={t('librarySettings.documentName')} rules={[{ required: true, message: t('librarySettings.documentNameRequired') }]}>
             <Input placeholder={t('librarySettings.documentNamePlaceholder')} />
           </Form.Item>
@@ -942,29 +1097,27 @@ const LibrarySettings = () => {
             <Input.TextArea rows={3} placeholder={t('librarySettings.descriptionPlaceholder')} />
           </Form.Item>
 
-          {editModal?.files?.length > 0 && (
+          {/* 目前檔案（唯讀顯示） */}
+          {editModal?.files?.length > 0 && editFileList.length === 0 && (
             <Form.Item label={t('librarySettings.currentAttachments')}>
               {editModal.files.map((f) => (
-                <div key={f.filename} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', marginBottom: 4, background: '#f5f5f5', borderRadius: 4, fontSize: 13 }}>
+                <div key={f.filename} style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', background: '#f5f5f5', borderRadius: 4, fontSize: 13 }}>
+                  <PaperClipOutlined style={{ marginRight: 6, color: '#1890ff' }} />
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    <PaperClipOutlined style={{ marginRight: 6, color: '#1890ff' }} />
                     {f.filename}
-                    {f.file_size ? ' (' + (f.file_size / 1024).toFixed(0) + ' KB)' : ''}
+                    {f.file_size ? ` (${(f.file_size / 1024).toFixed(0)} KB)` : ''}
                   </span>
-                  <Popconfirm
-                    title={t('librarySettings.deleteAttachmentConfirm', { name: f.filename })}
-                    onConfirm={() => handleDeleteFile(editModal.id, f.filename)}
-                    okText={t('common.confirm')}
-                    cancelText={t('common.cancel')}
-                  >
-                    <Button type="text" danger icon={<DeleteOutlined />} size="small" />
-                  </Popconfirm>
                 </div>
               ))}
             </Form.Item>
           )}
 
-          <Form.Item label={t('librarySettings.appendUpload')} extra={piiScanning ? t('pii.scanningFiles') : '選擇新檔案將取代目前的附件'}>
+          <Form.Item
+            label={t('librarySettings.uploadFile')}
+            extra={editFileList.length > 0
+              ? t('librarySettings.replaceFileHint')
+              : (piiScanning ? t('pii.scanningFiles') : t('librarySettings.replaceFileHintEmpty'))}
+          >
             <Upload
               maxCount={1}
               accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.odt,.ods,.odp"
@@ -989,158 +1142,96 @@ const LibrarySettings = () => {
         </Form>
       </Modal>
 
-      {/* Permission Modal */}
+      {/* ── 分發規則 Modal ── */}
       <Modal
-        title={t('librarySettings.permissionTitle', { name: permModal?.name })}
-        open={!!permModal}
-        onCancel={() => { setPermModal(null); setPermSearch(''); setPermRestricted(false); }}
-        onOk={() => { handlePermSave(); setPermSearch(''); }}
+        title={
+          <span>
+            <SendOutlined style={{ marginRight: 8 }} />
+            {t('librarySettings.editDistribution')} — {distModal?.name}
+          </span>
+        }
+        open={!!distModal}
+        onCancel={() => { setDistModal(null); setDistRules([]); }}
+        onOk={handleSaveDist}
+        confirmLoading={distSaving}
         okText={t('common.save')}
         cancelText={t('common.cancel')}
         okButtonProps={{ style: { background: 'var(--primary-color)', borderColor: 'var(--primary-color)' } }}
+        width={640}
       >
-        {/* 啟用存取限制開關 */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, padding: '12px 16px', background: '#f5f5f5', borderRadius: 8 }}>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>啟用存取限制</div>
-            <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
-              {permRestricted ? '僅限以下勾選的使用者可存取此文件' : '所有人均可存取此文件（公開）'}
-            </div>
-          </div>
-          <Switch
-            checked={permRestricted}
-            onChange={(checked) => {
-              setPermRestricted(checked);
-              if (!checked) setPermUsers([]); // 關閉時清空選擇
-            }}
-            checkedChildren="限定"
-            unCheckedChildren="公開"
-          />
-        </div>
-
-        {/* 僅在啟用限制時顯示使用者清單 */}
-        {permRestricted && (
+        {distLoading ? (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}><Spin /></div>
+        ) : (
           <>
-            {permUsers.length === 0 && (
-              <Alert
-                message="請至少選擇一位使用者，否則儲存後將視為公開"
-                type="warning"
-                showIcon
-                style={{ marginBottom: 8 }}
-              />
-            )}
-            <Input
-              prefix={<SearchOutlined style={{ color: '#bbb' }} />}
-              placeholder={t('librarySettings.selectUsers')}
-              value={permSearch}
-              onChange={(e) => setPermSearch(e.target.value)}
-              allowClear
-              style={{ marginBottom: 8 }}
-            />
-            <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid #d9d9d9', borderRadius: 6, padding: '4px 0' }}>
-              {userListLoading ? (
-                <div style={{ textAlign: 'center', padding: '20px 0' }}><Spin size="small" /></div>
-              ) : realUserList
-                .filter((u) => u.role !== 'root')
-                .filter((u) => {
-                  if (!permSearch.trim()) return true;
-                  const kw = permSearch.toLowerCase();
-                  return u.name?.toLowerCase().includes(kw) || u.email?.toLowerCase().includes(kw) || u.department?.toLowerCase().includes(kw);
-                })
-                .map((u) => (
-                  <label
-                    key={u.email}
-                    style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', cursor: 'pointer', borderRadius: 4, userSelect: 'none' }}
-                  >
-                    <Checkbox
-                      checked={permUsers.includes(u.email)}
-                      style={{ marginRight: 10 }}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setPermUsers((prev) =>
-                          checked ? [...prev, u.email] : prev.filter((email) => email !== u.email)
-                        );
-                      }}
-                    />
-                    <span style={{ flex: 1 }}>{u.name || u.email}</span>
-                    <span style={{ fontSize: 12, color: '#999', marginRight: 8 }}>{u.email}</span>
-                    <Tag style={{ fontSize: 11 }}>{u.department || ''}</Tag>
-                  </label>
-                ))}
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>{t('librarySettings.distributionSettingsHint')}</div>
+
+            <div style={{ maxHeight: 360, overflowY: 'auto', paddingRight: 2 }}>
+              {distRules.map((rule, idx) => (
+                <DistributionRow
+                  key={rule.country_code}
+                  rule={rule}
+                  catalogOptionsByCountry={catalogOptionsByCountry}
+                  countries={countries}
+                  userListByCountry={userListByCountry}
+                  userListLoading={userListLoading}
+                  t={t}
+                  onRemove={() => setDistRules((prev) => prev.filter((_, i) => i !== idx))}
+                  onChange={(updated) => setDistRules((prev) => prev.map((r, i) => i === idx ? updated : r))}
+                />
+              ))}
             </div>
-            {permUsers.length > 0 && (
-              <div style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
-                已選擇 {permUsers.length} 人
-              </div>
-            )}
+
+            {/* 國家勾選清單（含全選） */}
+            <div style={{ border: '1px solid #e8e8e8', borderRadius: 8, padding: '8px 12px', background: '#fafafa', marginBottom: 8 }}>
+              {countries.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '8px 0', color: '#bbb', fontSize: 13 }}>{t('common.noData')}</div>
+              ) : (
+                <>
+                  {/* 全選 */}
+                  <div style={{ marginBottom: 6, paddingBottom: 6, borderBottom: '1px solid #e8e8e8' }}>
+                    <Checkbox
+                      checked={usedCountriesInDist.length === countries.length && countries.length > 0}
+                      indeterminate={usedCountriesInDist.length > 0 && usedCountriesInDist.length < countries.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          countries.forEach((c) => handleToggleDist2(c.code, true));
+                        } else {
+                          setDistRules([]);
+                        }
+                      }}
+                    >
+                      <span style={{ fontWeight: 600 }}>{t('common.selectAll') || '全選'}</span>
+                    </Checkbox>
+                  </div>
+                  {countries.map((c) => {
+                    const translated = t('countries.' + c.code);
+                    const displayName = translated.startsWith('countries.') ? (c.name_zh || c.name || c.code) : translated;
+                    const isChecked = usedCountriesInDist.includes(c.code);
+                    return (
+                      <div key={c.code} style={{ marginBottom: 4 }}>
+                        <Checkbox
+                          checked={isChecked}
+                          onChange={(e) => handleToggleDist2(c.code, e.target.checked)}
+                        >
+                          <span style={{ fontWeight: 500 }}>{displayName}</span>
+                          <span style={{ color: '#999', marginLeft: 6, fontSize: 12 }}>({c.code})</span>
+                        </Checkbox>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </div>
           </>
         )}
       </Modal>
 
-      {/* Cover Image Modal */}
-      <Modal
-        title={<span><PictureOutlined style={{ marginRight: 8 }} />{t('librarySettings.coverImageTitle', { name: imageModal?.name })}</span>}
-        open={!!imageModal}
-        onCancel={handleCloseImageModal}
-        footer={[
-          imageModal?.imageUrl && (
-            <Popconfirm key="delete" title={t('librarySettings.deleteCoverImageConfirm')} onConfirm={handleDeleteImage} okText={t('common.confirm')} cancelText={t('common.cancel')} okButtonProps={{ danger: true }}>
-              <Button danger icon={<DeleteOutlined />}>{t('librarySettings.deleteImage')}</Button>
-            </Popconfirm>
-          ),
-          <Button key="cancel" onClick={handleCloseImageModal}>{t('common.cancel')}</Button>,
-          <Button key="upload" type="primary" onClick={handleUploadImage} loading={imageUploading} disabled={imageFileList.length === 0} style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}>{t('common.upload')}</Button>,
-        ]}
-        width={520}
-      >
-        <p style={{ marginBottom: 12, color: '#666' }}>{t('librarySettings.coverImageHint')}</p>
-
-        {existingImageUrl && !imagePreview && (
-          <div style={{ marginBottom: 16, textAlign: 'center' }}>
-            <p style={{ marginBottom: 8, fontWeight: 500, color: '#333' }}>{t('librarySettings.currentCoverImage')}</p>
-            <img src={existingImageUrl} alt="current cover" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, border: '1px solid #d9d9d9', objectFit: 'contain' }} />
-          </div>
-        )}
-
-        <Upload.Dragger
-          accept=".png,.jpg,.jpeg"
-          maxCount={1}
-          fileList={imageFileList}
-          beforeUpload={(file) => {
-            if (file.size > 5 * 1024 * 1024) {
-              message.error(t('librarySettings.imageSizeExceeded'));
-              return Upload.LIST_IGNORE;
-            }
-            const reader = new FileReader();
-            reader.onload = (e) => setImagePreview(e.target.result);
-            reader.readAsDataURL(file);
-            return false;
-          }}
-          onChange={({ fileList }) => {
-            setImageFileList(fileList.slice(-1));
-            if (fileList.length === 0) setImagePreview(null);
-          }}
-          onRemove={() => setImagePreview(null)}
-        >
-          <p className="ant-upload-drag-icon"><InboxOutlined /></p>
-          <p className="ant-upload-text">{t('librarySettings.dragImageHint')}</p>
-          <p className="ant-upload-hint">{t('librarySettings.imageFormatHint')}</p>
-        </Upload.Dragger>
-
-        {imagePreview && (
-          <div style={{ marginTop: 16, textAlign: 'center' }}>
-            <p style={{ marginBottom: 8, fontWeight: 500, color: '#333' }}>{t('librarySettings.imagePreview')}</p>
-            <img src={imagePreview} alt="preview" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, border: '1px solid #d9d9d9', objectFit: 'contain' }} />
-          </div>
-        )}
-      </Modal>
-
-      {/* Edit Catalog Modal */}
+      {/* ── 編輯館 Modal ── */}
       <Modal
         title={
           <span>
             <EditOutlined style={{ marginRight: 8 }} />
-            {t('librarySettings.editLibraryTitle', { name: editCatalogModal?.name })}
+            {t('librarySettings.editLibraryTitle', { name: editCatalogModal?.catalog_name })}
           </span>
         }
         open={!!editCatalogModal}
@@ -1153,7 +1244,7 @@ const LibrarySettings = () => {
         width={600}
       >
         {/* 館名編輯 */}
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
             <FolderOutlined style={{ marginRight: 6, color: 'var(--primary-color)' }} />
             {t('librarySettings.editLibraryNameLabel')}
@@ -1164,13 +1255,20 @@ const LibrarySettings = () => {
             placeholder={t('librarySettings.editLibraryNamePlaceholder')}
             size="large"
             prefix={<FolderOutlined style={{ color: '#bbb' }} />}
+            style={{ marginBottom: 8 }}
+          />
+          <Input.TextArea
+            value={editCatalogDesc}
+            onChange={(e) => setEditCatalogDesc(e.target.value)}
+            placeholder="館的描述（選填）"
+            rows={2}
           />
         </div>
 
         <Divider style={{ margin: '16px 0' }} />
 
         {/* 封面圖片管理 */}
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
             <PictureOutlined style={{ marginRight: 6, color: 'var(--primary-color)' }} />
             {t('librarySettings.coverImage')}
@@ -1178,11 +1276,7 @@ const LibrarySettings = () => {
 
           {editCatalogExistingImageUrl && !editCatalogImagePreview && (
             <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <img
-                src={editCatalogExistingImageUrl}
-                alt="cover"
-                style={{ width: 80, height: 60, objectFit: 'cover', borderRadius: 6, border: '1px solid #d9d9d9' }}
-              />
+              <img src={editCatalogExistingImageUrl} alt="cover" style={{ width: 80, height: 60, objectFit: 'cover', borderRadius: 6, border: '1px solid #d9d9d9' }} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>{t('librarySettings.currentCoverImage')}</div>
                 <Popconfirm
@@ -1203,10 +1297,7 @@ const LibrarySettings = () => {
             maxCount={1}
             fileList={editCatalogImageFileList}
             beforeUpload={(file) => {
-              if (file.size > 5 * 1024 * 1024) {
-                message.error(t('librarySettings.imageSizeExceeded'));
-                return Upload.LIST_IGNORE;
-              }
+              if (file.size > 5 * 1024 * 1024) { message.error(t('librarySettings.imageSizeExceeded')); return Upload.LIST_IGNORE; }
               const reader = new FileReader();
               reader.onload = (e) => setEditCatalogImagePreview(e.target.result);
               reader.readAsDataURL(file);
@@ -1225,20 +1316,10 @@ const LibrarySettings = () => {
 
           {editCatalogImagePreview && (
             <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <img
-                src={editCatalogImagePreview}
-                alt="preview"
-                style={{ width: 80, height: 60, objectFit: 'cover', borderRadius: 6, border: '1px solid #d9d9d9' }}
-              />
+              <img src={editCatalogImagePreview} alt="preview" style={{ width: 80, height: 60, objectFit: 'cover', borderRadius: 6, border: '1px solid #d9d9d9' }} />
               <div>
                 <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>{t('librarySettings.imagePreview')}</div>
-                <Button
-                  type="primary"
-                  size="small"
-                  loading={editCatalogImageUploading}
-                  onClick={handleEditCatalogUploadImage}
-                  style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
-                >
+                <Button type="primary" size="small" loading={editCatalogImageUploading} onClick={handleEditCatalogUploadImage} style={{ background: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}>
                   {t('common.upload')}
                 </Button>
               </div>
@@ -1265,27 +1346,19 @@ const LibrarySettings = () => {
               {editCatalogDocs.map((doc) => (
                 <div
                   key={doc.doc_id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '8px 12px',
-                    borderBottom: '1px solid #f5f5f5',
-                    gap: 8,
-                  }}
+                  style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid #f5f5f5', gap: 8 }}
                 >
                   <FileTextOutlined style={{ color: '#1890ff', flexShrink: 0 }} />
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13 }}>
                     {doc.name}
                   </span>
-                  <Popconfirm
-                    title={t('librarySettings.editLibraryDeleteDocConfirm', { name: doc.name })}
-                    onConfirm={() => handleEditCatalogDeleteDoc(doc.doc_id, doc.name)}
-                    okText={t('librarySettings.confirmDelete')}
-                    cancelText={t('common.cancel')}
-                    okButtonProps={{ danger: true }}
-                  >
-                    <Button type="text" danger icon={<DeleteOutlined />} size="small" />
-                  </Popconfirm>
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    {(doc.distribution_countries || []).map((code) => (
+                      <Tag key={code} color="blue" style={{ margin: 0, fontSize: 11 }}>
+                        {code}
+                      </Tag>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
@@ -1293,17 +1366,13 @@ const LibrarySettings = () => {
         </div>
       </Modal>
 
-      {/* Upload Leave Confirm Modal */}
+      {/* ── 離開確認 Modal ── */}
       <Modal
         title={t('librarySettings.leaveConfirmTitle')}
         open={uploadLeaveConfirmOpen}
         onCancel={() => setUploadLeaveConfirmOpen(false)}
         footer={[
-          <Button
-            key="discard"
-            danger
-            onClick={closeUploadModal}
-          >
+          <Button key="discard" danger onClick={closeUploadModal}>
             {t('librarySettings.leaveConfirmDiscard')}
           </Button>,
           <Button

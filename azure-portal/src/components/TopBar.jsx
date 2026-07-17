@@ -57,8 +57,8 @@ const COUNTRY_SELECTOR_ROUTES = [
   '/',                          // Home
   '/library',                   // Library
   '/settings/announcements',    // AnnouncementSettings
-  '/settings/library',          // LibrarySettings
   '/settings/usage-stats',      // UsageStats
+  // '/settings/library' 已移除：圖書館管理為全域管理，不依國家篩選
 ];
 
 const TopBar = ({ onToggleSidebar }) => {

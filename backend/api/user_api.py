@@ -41,6 +41,7 @@ def _resolve_country_filter(payload: dict, query_country: Optional[str] = None) 
     解析國家篩選條件：
     - root / admin：可指定任意國家，或不指定（看全部）
     - 其他角色：強制只看自己國家
+    注意：UserRouteMap 存在 global DB，不需要 local DB，因此不限制 LOCAL_DB_CONFIG
     """
     user_country = payload.get("country", "TW")
     role = payload.get("role", "user")
@@ -48,8 +49,6 @@ def _resolve_country_filter(payload: dict, query_country: Optional[str] = None) 
     if role in ("root", "admin"):
         # root / admin 可以指定國家，也可以不指定（看全部）
         if query_country:
-            if query_country not in settings.LOCAL_DB_CONFIG:
-                raise HTTPException(status_code=400, detail=f"國家 [{query_country}] 不存在")
             return query_country
         return None  # None = 不篩選，看全部
     else:

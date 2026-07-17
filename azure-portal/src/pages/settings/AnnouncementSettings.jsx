@@ -7,6 +7,7 @@ import {
   Input,
   Upload,
   Select,
+  Checkbox,
   Tag,
   Popconfirm,
   message,
@@ -24,10 +25,9 @@ import {
   GlobalOutlined,
   PaperClipOutlined,
   BookOutlined,
-  FolderOutlined,
 } from '@ant-design/icons';
-import { announcementAPI, libraryAPI, piiAPI } from '../../services/api';
-import { adaptAnnouncements, adaptLibraryDocsFlat, adaptCatalogs, toAnnouncementCreate, toAnnouncementUpdate } from '../../utils/adapters';
+import { announcementAPI, globalLibraryAPI, piiAPI } from '../../services/api';
+import { adaptAnnouncements, toAnnouncementCreate, toAnnouncementUpdate } from '../../utils/adapters';
 import { announcements as mockAnnouncements } from '../../data/mockData';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCountry } from '../../contexts/CountryContext';
@@ -35,6 +35,64 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import '../Settings.css';
 
 const { TextArea } = Input;
+
+/**
+ * 國家 Checkbox 選擇元件（含全選，支援 indeterminate 三態）
+ * 作為 Form.Item 的受控元件使用（value / onChange 由 Form 注入）
+ */
+const CountryCheckboxGroup = ({ countries, editingItem, t, value = [], onChange }) => {
+  const allCodes = countries.map((c) => c.code);
+  const checkedCount = value.length;
+  const allChecked = checkedCount === allCodes.length && allCodes.length > 0;
+  const indeterminate = checkedCount > 0 && checkedCount < allCodes.length;
+
+  const handleSelectAll = (e) => {
+    onChange(e.target.checked ? allCodes : []);
+  };
+
+  const handleChange = (checkedValues) => {
+    onChange(checkedValues);
+  };
+
+  return (
+    <div style={{ border: '1px solid #d9d9d9', borderRadius: 6, padding: '8px 12px', background: '#fafafa' }}>
+      {/* 全選（僅新增模式顯示） */}
+      {!editingItem && (
+        <>
+          <Checkbox
+            indeterminate={indeterminate}
+            checked={allChecked}
+            onChange={handleSelectAll}
+            style={{ fontWeight: 600 }}
+          >
+            {t('announcementSettings.allCountries')}
+          </Checkbox>
+          <div style={{ borderTop: '1px solid #e8e8e8', margin: '6px 0' }} />
+        </>
+      )}
+      {/* 各國 Checkbox */}
+      <Checkbox.Group
+        value={value}
+        onChange={handleChange}
+        style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
+      >
+        {countries.map((c) => {
+          const translated = t(`countries.${c.code}`);
+          const displayName = translated.startsWith('countries.') ? (c.name || c.code) : translated;
+          return (
+            <Checkbox
+              key={c.code}
+              value={c.code}
+              disabled={!!editingItem}
+            >
+              {displayName} ({c.code})
+            </Checkbox>
+          );
+        })}
+      </Checkbox.Group>
+    </div>
+  );
+};
 
 const AnnouncementSettings = () => {
   const { user } = useAuth();
@@ -53,13 +111,10 @@ const AnnouncementSettings = () => {
   const [piiScanning, setPiiScanning] = useState(false);
   const [piiPassed, setPiiPassed] = useState(true); // true = 通過或未掃描
   const [form] = Form.useForm();
-  const watchedTargetCountry = Form.useWatch('target_country', form);
+  // 監聽 target_country 變化，用於即時篩選文件（需在 form 初始化後）
+  const watchedCountries = Form.useWatch('target_country', form);
 
-  // 圖書館文件選擇相關（先選館→再選文件）
-  const [libCatalogs, setLibCatalogs] = useState([]); // 館名列表
-  const [libCatalogsLoading, setLibCatalogsLoading] = useState(false);
-  const [selectedCatalog, setSelectedCatalog] = useState(null); // 選中的館名
-  const [libraryDocs, setLibraryDocs] = useState([]); // 該館下的文件列表
+  // 圖書館文件選擇相關（直接依國家篩選，不需選館）
   const [libraryDocsLoading, setLibraryDocsLoading] = useState(false);
   const [allLibraryDocs, setAllLibraryDocs] = useState([]); // 所有文件（用於回顯已選）
 
@@ -154,50 +209,37 @@ const AnnouncementSettings = () => {
     fetchAnnouncements(effectiveCountry);
   }, [effectiveCountry]);
 
-  // 載入館名列表 + 所有文件（供選擇器使用），回傳所有文件供 handleEdit 使用
-  const fetchLibraryCatalogs = useCallback(async (country) => {
-    setLibCatalogsLoading(true);
+  // 載入所有全域文件（供選擇器使用），回傳文件供 handleEdit 使用
+  const fetchLibraryCatalogs = useCallback(async () => {
     setLibraryDocsLoading(true);
     try {
-      const [catRes, docsRes] = await Promise.all([
-        libraryAPI.listCatalogs(country).catch(() => ({ data: [] })),
-        libraryAPI.listAll(country).catch(() => ({ data: [] })),
-      ]);
-      const cats = adaptCatalogs(catRes.data);
-      const docs = adaptLibraryDocsFlat(docsRes.data);
-      setLibCatalogs(cats);
+      const docsRes = await globalLibraryAPI.listDocs().catch(() => ({ data: [] }));
+      const docs = Array.isArray(docsRes.data) ? docsRes.data : [];
       setAllLibraryDocs(docs);
-      // 預設不選館，文件列表為空
-      setLibraryDocs([]);
-      setSelectedCatalog(null);
-      return docs; // 回傳供 handleEdit 使用
+      return docs;
     } catch (err) {
       console.warn('載入圖書館資料失敗', err);
-      setLibCatalogs([]);
       setAllLibraryDocs([]);
-      setLibraryDocs([]);
       return [];
     } finally {
-      setLibCatalogsLoading(false);
       setLibraryDocsLoading(false);
     }
   }, []);
 
-  // 選擇館名後，篩選該館下的文件
-  const handleCatalogChange = useCallback((catalogName, clearSelection = true) => {
-    setSelectedCatalog(catalogName);
-    if (!catalogName) {
-      setLibraryDocs([]);
-      if (clearSelection) form.setFieldsValue({ library_docs: [] });
-      return;
-    }
-    const filtered = allLibraryDocs.filter((doc) => doc.libraryName === catalogName);
-    setLibraryDocs(filtered);
-    // 換館時清除已選的文件（編輯回填時不清除）
-    if (clearSelection) {
-      form.setFieldsValue({ library_docs: [] });
-    }
-  }, [allLibraryDocs, form]);
+  /**
+   * 根據選中的國家陣列篩選可用文件
+   * GlobalDocListResponse 有 distribution_countries: List[str]（國家代碼陣列）
+   * - 未選任何國家 → 顯示所有文件
+   * - 選了 N 個國家 → 只顯示「在所有選中國家都有分發」的文件（取交集）
+   *   （全選 5 個國家 = 只顯示 5 個國家都有的文件，比選 4 個更嚴格）
+   */
+  const getFilteredLibraryDocs = useCallback((selectedCountries) => {
+    if (!selectedCountries || selectedCountries.length === 0) return allLibraryDocs;
+    return allLibraryDocs.filter((doc) => {
+      const distCodes = doc.distribution_countries || [];
+      return selectedCountries.every((code) => distCodes.includes(code));
+    });
+  }, [allLibraryDocs]);
 
   // 偵測表單是否有變更（與開啟時的初始值比較）
   const hasFormData = () => {
@@ -206,15 +248,16 @@ const AnnouncementSettings = () => {
 
     const subject = (values.subject || '').trim();
     const content = (values.content || '').trim();
-    const libraryDocs = (values.library_docs || []).slice().sort().join(',');
+    // 單選：library_docs 是字串
+    const libraryDoc = values.library_docs || '';
+    const initLibraryDoc = initial.library_docs || '';
 
     const initSubject = (initial.subject || '').trim();
     const initContent = (initial.content || '').trim();
-    const initLibraryDocs = (initial.library_docs || []).slice().sort().join(',');
 
     // 有新增附件也算有變更
     if (fileList.length > 0) return true;
-    return subject !== initSubject || content !== initContent || libraryDocs !== initLibraryDocs;
+    return subject !== initSubject || content !== initContent || libraryDoc !== initLibraryDoc;
   };
 
   // 點擊關閉時：有資料才跳確認視窗，否則直接關閉
@@ -231,8 +274,6 @@ const AnnouncementSettings = () => {
     setModalOpen(false);
     setLeaveConfirmOpen(false);
     setFileList([]);
-    setSelectedCatalog(null);
-    setLibraryDocs([]);
     form.resetFields();
     setPiiPassed(true);
   };
@@ -246,10 +287,13 @@ const AnnouncementSettings = () => {
       const subject = (values.subject || '').trim() || t('announcementSettings.draftDefaultSubject');
       const content = (values.content || '').trim();
 
-      const selectedDocIds = values.library_docs || [];
+      // 單選：library_docs 是字串，包成陣列統一處理
+      const rawDocId = values.library_docs;
+      const selectedDocIds = rawDocId ? [rawDocId] : [];
       const libraryDocsData = selectedDocIds.map((docId) => {
-        const doc = allLibraryDocs.find((d) => d.id === docId);
-        return doc ? { docId: doc.id, name: doc.name, libraryName: doc.libraryName } : null;
+        const doc = allLibraryDocs.find((d) => d.doc_id === docId);
+        if (!doc) return null;
+        return { docId: doc.doc_id, name: doc.name, libraryName: '' };
       }).filter(Boolean);
 
       const adapterData = {
@@ -259,28 +303,31 @@ const AnnouncementSettings = () => {
         libraryDocs: libraryDocsData,
       };
 
-      const targetCountry = isSuperAdmin ? (values.target_country || displayCountry) : undefined;
-
-      let noticeId;
       if (editingItem) {
+        // 編輯模式：只更新當前國家的草稿
+        const targetCountry = isSuperAdmin ? ((values.target_country || [])[0] || displayCountry) : undefined;
         await announcementAPI.update(editingItem.id, toAnnouncementUpdate(adapterData), targetCountry);
-        noticeId = editingItem.id;
+        const noticeId = editingItem.id;
+        if (fileList.length > 0 && noticeId) {
+          const formData = new FormData();
+          fileList.forEach((f) => formData.append('file', f.originFileObj || f));
+          try { await announcementAPI.uploadFile(noticeId, formData, targetCountry); } catch (e) { console.error('草稿附件上傳失敗', e); }
+        }
       } else {
-        const res = await announcementAPI.create(toAnnouncementCreate(adapterData), targetCountry);
-        noticeId = res.data?.detail;
-      }
-
-      // 若有附件一併上傳
-      if (fileList.length > 0 && noticeId) {
-        const formData = new FormData();
-        fileList.forEach((f) => {
-          const file = f.originFileObj || f;
-          formData.append('file', file);
-        });
-        try {
-          await announcementAPI.uploadFile(noticeId, formData, targetCountry);
-        } catch (uploadErr) {
-          console.error('草稿附件上傳失敗', uploadErr);
+        // 新增模式：對所有選中國家都建立草稿
+        const targetCountries = isSuperAdmin ? (values.target_country || [displayCountry]) : [displayCountry];
+        for (const code of targetCountries) {
+          try {
+            const res = await announcementAPI.create(toAnnouncementCreate(adapterData), code);
+            const noticeId = res.data?.detail;
+            if (fileList.length > 0 && noticeId) {
+              const formData = new FormData();
+              fileList.forEach((f) => formData.append('file', f.originFileObj || f));
+              try { await announcementAPI.uploadFile(noticeId, formData, code); } catch (e) { console.error(`草稿附件上傳到 ${code} 失敗`, e); }
+            }
+          } catch (err) {
+            console.error(`建立草稿到 ${code} 失敗`, err);
+          }
         }
       }
 
@@ -298,53 +345,41 @@ const AnnouncementSettings = () => {
   const handleAdd = () => {
     setEditingItem(null);
     setFileList([]);
-    setSelectedCatalog(null);
-    setLibraryDocs([]);
     form.resetFields();
     form.setFieldsValue({
       publish_status: 'published',
-      library_docs: [],
-      // super_admin 預設選中當前顯示的國家
-      ...(isSuperAdmin ? { target_country: displayCountry } : {}),
+      library_docs: null,
+      // super_admin 預設選中當前顯示的國家（陣列）
+      ...(isSuperAdmin ? { target_country: [displayCountry] } : {}),
     });
     // 記錄初始值（新增模式全空）
-    initialFormValuesRef.current = { subject: '', content: '', library_docs: [] };
-    // 載入圖書館館名 + 文件
-    fetchLibraryCatalogs(effectiveCountry);
+    initialFormValuesRef.current = { subject: '', content: '', library_docs: '' };
+    // 載入全域圖書館文件
+    fetchLibraryCatalogs();
     setModalOpen(true);
   };
 
   const handleEdit = (record) => {
     setEditingItem(record);
     setFileList([]);
-    // 還原已選的圖書館文件 ID
-    const existingDocIds = (record.libraryDocs || []).map((d) => d.docId);
+    // 單選：只取第一個已選文件 ID
+    const existingDocId = (record.libraryDocs || [])[0]?.docId || null;
     form.setFieldsValue({
       subject: record.subject,
       content: record.content,
       publish_status: record.publish_status || 'draft',
-      library_docs: existingDocIds,
-      // 編輯時使用當前顯示的國家
-      ...(isSuperAdmin ? { target_country: displayCountry } : {}),
+      library_docs: existingDocId,
+      // 編輯時使用當前顯示的國家（陣列，且固定單一國家）
+      ...(isSuperAdmin ? { target_country: [displayCountry] } : {}),
     });
     // 記錄初始值（編輯模式記錄原始資料）
     initialFormValuesRef.current = {
       subject: record.subject || '',
       content: record.content || '',
-      library_docs: existingDocIds,
+      library_docs: existingDocId,
     };
-    // 載入圖書館館名 + 文件，載入完成後自動推斷已選的館並篩選文件
-    fetchLibraryCatalogs(effectiveCountry).then((loadedDocs) => {
-      if (record.libraryDocs?.length > 0) {
-        const firstLib = record.libraryDocs[0].libraryName;
-        if (firstLib) {
-          setSelectedCatalog(firstLib);
-          // 手動篩選該館的文件（不清除已選）
-          const filtered = (loadedDocs || []).filter((doc) => doc.libraryName === firstLib);
-          setLibraryDocs(filtered);
-        }
-      }
-    });
+    // 載入全域圖書館文件（編輯模式直接顯示所有文件，不需篩選館）
+    fetchLibraryCatalogs();
     setModalOpen(true);
   };
 
@@ -374,10 +409,14 @@ const AnnouncementSettings = () => {
       const values = await form.validateFields();
 
       // 將選中的圖書館文件 ID 轉換為完整的 libraryDocs 物件（從 allLibraryDocs 查找）
-      const selectedDocIds = values.library_docs || [];
+      // 單選：library_docs 是字串，包成陣列統一處理
+      const rawDocId = values.library_docs;
+      const selectedDocIds = rawDocId ? [rawDocId] : [];
       const libraryDocsData = selectedDocIds.map((docId) => {
-        const doc = allLibraryDocs.find((d) => d.id === docId);
-        return doc ? { docId: doc.id, name: doc.name, libraryName: doc.libraryName } : null;
+        const doc = allLibraryDocs.find((d) => d.doc_id === docId);
+        if (!doc) return null;
+        // libraryName 僅為 metadata，不影響查詢，傳空字串即可
+        return { docId: doc.doc_id, name: doc.name, libraryName: '' };
       }).filter(Boolean);
 
       const adapterData = {
@@ -387,17 +426,17 @@ const AnnouncementSettings = () => {
         libraryDocs: libraryDocsData,
       };
 
-      // super_admin 使用表單中選擇的目標國家
-      const targetCountry = isSuperAdmin ? values.target_country : undefined;
+      // super_admin 使用表單中選擇的目標國家（陣列）
+      const targetCountries = isSuperAdmin ? (values.target_country || []) : [];
 
-      // ===== 全部國家批次建立 =====
-      if (targetCountry === 'ALL' && !editingItem) {
+      // ===== 多國批次建立（新增模式，且選了多個國家） =====
+      if (!editingItem && isSuperAdmin && targetCountries.length > 1) {
         const successCountries = [];
         const failedCountries = [];
 
-        for (const c of countries) {
+        for (const code of targetCountries) {
           try {
-            const res = await announcementAPI.create(toAnnouncementCreate(adapterData), c.code);
+            const res = await announcementAPI.create(toAnnouncementCreate(adapterData), code);
             const nid = res.data?.detail;
 
             // 如果有選擇檔案，上傳附件
@@ -408,23 +447,23 @@ const AnnouncementSettings = () => {
                 formData.append('file', file);
               });
               try {
-                await announcementAPI.uploadFile(nid, formData, c.code);
+                await announcementAPI.uploadFile(nid, formData, code);
               } catch (uploadErr) {
-                console.error(`上傳附件到 ${c.code} 失敗`, uploadErr);
+                console.error(`上傳附件到 ${code} 失敗`, uploadErr);
                 // 回滾：刪除剛建立的公告
                 try {
-                  await announcementAPI.delete(nid, c.code);
+                  await announcementAPI.delete(nid, code);
                 } catch (delErr) {
-                  console.error(`回滾刪除 ${c.code} 公告失敗`, delErr);
+                  console.error(`回滾刪除 ${code} 公告失敗`, delErr);
                 }
-                failedCountries.push(c.code);
+                failedCountries.push(code);
                 continue;
               }
             }
-            successCountries.push(c.code);
+            successCountries.push(code);
           } catch (err) {
-            console.error(`建立公告到 ${c.code} 失敗`, err);
-            failedCountries.push(c.code);
+            console.error(`建立公告到 ${code} 失敗`, err);
+            failedCountries.push(code);
           }
         }
 
@@ -442,8 +481,8 @@ const AnnouncementSettings = () => {
         return;
       }
 
-      // ===== 單一國家建立/編輯（原有邏輯） =====
-      const countryParam = targetCountry;
+      // ===== 單一國家建立/編輯 =====
+      const countryParam = isSuperAdmin ? (targetCountries[0] || displayCountry) : undefined;
 
       let noticeId;
       if (editingItem) {
@@ -635,7 +674,7 @@ const AnnouncementSettings = () => {
         }}
       >
         <Form form={form} layout="vertical">
-          {/* super_admin 選擇目標國家 */}
+          {/* super_admin 選擇目標國家（Checkbox 列表） */}
           {isSuperAdmin && (
             <Form.Item
               name="target_country"
@@ -645,19 +684,18 @@ const AnnouncementSettings = () => {
                   {t('announcementSettings.targetCountry')}
                 </span>
               }
-              rules={[{ required: true, message: t('announcementSettings.targetCountryRequired') }]}
+              rules={[{
+                required: true,
+                validator: (_, value) =>
+                  value && value.length > 0
+                    ? Promise.resolve()
+                    : Promise.reject(new Error(t('announcementSettings.targetCountryRequired'))),
+              }]}
             >
-              <Select
-                placeholder={t('announcementSettings.targetCountryPlaceholder')}
-                options={[
-                  // 「全部國家」僅在新增模式下顯示（編輯時各國公告 ID 不同，不支援批次）
-                  ...(!editingItem ? [{ value: 'ALL', label: t('announcementSettings.allCountries') }] : []),
-                  ...countries.map((c) => {
-                    const translated = t(`countries.${c.code}`);
-                    const displayName = translated.startsWith('countries.') ? (c.name || c.code) : translated;
-                    return { value: c.code, label: `${displayName} (${c.code})` };
-                  }),
-                ]}
+              <CountryCheckboxGroup
+                countries={countries}
+                editingItem={editingItem}
+                t={t}
               />
             </Form.Item>
           )}
@@ -757,8 +795,7 @@ const AnnouncementSettings = () => {
               </div>
             )}
           </Form.Item>
-          {/* 圖書館資料選擇器：先選館→再選文件（選擇「全部國家」時隱藏，因為各國圖書館文件不同） */}
-          {watchedTargetCountry !== 'ALL' && (
+          {/* 全域圖書館文件選擇器：依選中國家自動篩選可用文件 */}
           <>
           <Divider style={{ margin: '16px 0 8px' }}>
             <span style={{ fontSize: 13, color: '#722ed1' }}>
@@ -766,44 +803,6 @@ const AnnouncementSettings = () => {
               {t('announcementSettings.libraryDocsLabel')}
             </span>
           </Divider>
-          <Form.Item
-            label={
-              <span>
-                <FolderOutlined style={{ marginRight: 4 }} />
-                {t('announcementSettings.selectCatalogLabel')}
-              </span>
-            }
-            extra={t('announcementSettings.selectCatalogHint')}
-          >
-            <Select
-              placeholder={libCatalogsLoading ? t('announcementSettings.libraryDocsLoading') : t('announcementSettings.selectCatalogPlaceholder')}
-              loading={libCatalogsLoading}
-              value={selectedCatalog}
-              onChange={(val) => handleCatalogChange(val)}
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              notFoundContent={libCatalogsLoading ? <Spin size="small" /> : t('announcementSettings.noCatalogs')}
-              options={libCatalogs.map((cat) => ({
-                value: cat.name,
-                label: `${cat.name}（${cat.docCount || 0} ${t('announcementSettings.docsUnit')}）`,
-              }))}
-              optionRender={(option) => {
-                const cat = libCatalogs.find((c) => c.name === option.value);
-                return (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <FolderOutlined style={{ color: '#722ed1', flexShrink: 0 }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 500 }}>{cat?.name || option.label}</div>
-                      <div style={{ fontSize: 12, color: '#999' }}>
-                        {cat?.docCount || 0} {t('announcementSettings.docsUnit')}
-                      </div>
-                    </div>
-                  </div>
-                );
-              }}
-            />
-          </Form.Item>
           <Form.Item
             name="library_docs"
             label={
@@ -814,49 +813,43 @@ const AnnouncementSettings = () => {
             }
             extra={t('announcementSettings.libraryDocsHint')}
           >
-            <Select
-              mode="multiple"
-              placeholder={
-                !selectedCatalog
-                  ? t('announcementSettings.selectCatalogFirst')
-                  : libraryDocsLoading
-                    ? t('announcementSettings.libraryDocsLoading')
-                    : t('announcementSettings.libraryDocsPlaceholder')
-              }
-              disabled={!selectedCatalog}
-              loading={libraryDocsLoading}
-              showSearch
-              allowClear
-              optionFilterProp="label"
-              notFoundContent={
-                libraryDocsLoading ? <Spin size="small" /> : t('announcementSettings.libraryDocsEmpty')
-              }
-              options={libraryDocs.map((doc) => ({
-                value: doc.id,
-                label: doc.name,
-              }))}
-              optionRender={(option) => {
-                const doc = libraryDocs.find((d) => d.id === option.value);
-                return (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <BookOutlined style={{ color: 'var(--primary-color)', flexShrink: 0 }} />
-                    <div style={{ flex: 1, overflow: 'hidden' }}>
-                      <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {doc?.name || option.label}
-                      </div>
-                      {doc?.description && (
-                        <div style={{ fontSize: 12, color: '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {doc.description}
+            {(() => {
+              const filteredDocs = getFilteredLibraryDocs(watchedCountries || []);
+              return (
+                <Select
+                  placeholder={libraryDocsLoading ? t('announcementSettings.libraryDocsLoading') : t('announcementSettings.libraryDocsPlaceholder')}
+                  loading={libraryDocsLoading}
+                  showSearch
+                  allowClear
+                  optionFilterProp="label"
+                  notFoundContent={libraryDocsLoading ? <Spin size="small" /> : t('announcementSettings.libraryDocsEmpty')}
+                  options={filteredDocs.map((doc) => ({
+                    value: doc.doc_id,
+                    label: doc.name,
+                  }))}
+                  optionRender={(option) => {
+                    const doc = filteredDocs.find((d) => d.doc_id === option.value);
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <BookOutlined style={{ color: 'var(--primary-color)', flexShrink: 0 }} />
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                          <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {doc?.name || option.label}
+                          </div>
+                          {doc?.description && (
+                            <div style={{ fontSize: 12, color: '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {doc.description}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              }}
-            />
+                      </div>
+                    );
+                  }}
+                />
+              );
+            })()}
           </Form.Item>
           </>
-          )}
         </Form>
       </Modal>
       {/* ===== 離開確認視窗 ===== */}

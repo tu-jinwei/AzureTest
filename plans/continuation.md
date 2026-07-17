@@ -466,6 +466,183 @@ PII_BLOCK_CHAT=true           # 阻擋含 PII 的聊天訊息（Phase 6.2 新增
 | 檔案上傳 | ❌ 422 拒絕 + 清理檔案 | ⚠️ 警告 + 正常上傳 | ⚠️ 警告 + 正常上傳 |
 | 聊天訊息 | ❌ 422 拒絕 | 🔒 脫敏後送 AI | ⚠️ 僅警告 + 原始訊息送 AI |
 
+### ✅ Phase 2.0：功能全面升級（2026-06-26）
+
+#### 2.0.1 個人資料與頭貼管理
+
+**後端新增：**
+- `PATCH /api/auth/profile` — 更新個人顯示名稱
+- `POST /api/auth/avatar` — 上傳頭貼（multipart/form-data，最大 5MB，支援 PNG/JPG/GIF/WebP）
+- `DELETE /api/auth/avatar` — 刪除頭貼
+- `GET /api/auth/avatar` — 取得頭貼圖片（回傳 blob）
+- `migrations/add_avatar_url_to_user.sql` — 新增 `avatar_url` 欄位至 `user_route_map`
+
+**前端新增：**
+- `api.js` 新增 `authAPI.updateProfile()`、`authAPI.uploadAvatar()`、`authAPI.deleteAvatar()`、`authAPI.getAvatarUrl()`
+- `TopBar.jsx` 頭像改為 Dropdown 選單（含「編輯個人資料」+「切換語言」+「登出」）
+- 「編輯個人資料」Modal：顯示姓名/Email、修改顯示名稱、上傳/更換/刪除頭貼
+- `i18n` 新增 `topbar` 個人資料相關翻譯鍵（`editProfile`、`profileModalTitle`、`nameLabel`、`avatarLabel`、`uploadAvatar`、`changeAvatar`、`deleteAvatar`、`avatarHint` 等）
+
+#### 2.0.2 語言切換持久化
+
+- `LanguageContext.jsx` 加入 `localStorage` 儲存語言偏好（key: `ctbc_language`）
+- 使用者切換語言後，下次開啟頁面自動套用上次選擇的語言
+- 預設語言：繁體中文（`zh-TW`）
+
+#### 2.0.3 公告設定大幅升級
+
+**圖書館文件關聯功能：**
+- 公告可直接關聯圖書館中已上傳的文件（作為公告附件使用）
+- 選擇流程：先選館名（`Select` 下拉）→ 再選文件（`Select` 多選）
+- 後端 `local_notice` 表新增 `library_docs` JSONB 欄位（`[{ docId, name, libraryName }]`）
+- 前端 `AnnouncementSettings.jsx` 新增館名/文件選擇器（`fetchLibraryCatalogs()` 同時載入 catalogs + 文件）
+- 表格新增「圖書館資料」欄位（顯示關聯文件數量）
+- 選擇「全部國家」時隱藏圖書館選擇器（各國圖書館文件不同）
+- `adapters.js` 新增 `adaptLibraryDocsFlat()` 函式（回傳扁平化文件列表）
+
+**全部國家批次發布：**
+- `super_admin` 新增公告時，目標國家可選「全部國家」
+- 批次對所有已設定的國家建立相同公告（含附件）
+- 任一國家失敗時顯示警告（不影響其他國家）
+- 附件上傳失敗時自動回滾（刪除剛建立的公告）
+
+**離開確認視窗（防止誤關）：**
+- 偵測表單是否有變更（主旨、內容、圖書館文件、附件）
+- 點擊關閉時若有未儲存變更，彈出確認視窗
+- 三個選項：「取消編輯」（放棄）、「存為草稿」（儲存 draft）、「繼續編輯」（返回）
+- `handleSaveDraft()` 支援新增/編輯模式，含附件上傳
+
+**PII 預掃描整合：**
+- 選擇附件後自動呼叫 `piiAPI.scanFiles()` 預掃描
+- 偵測到 PII 時彈出警告 Modal 並清除檔案列表
+- 掃描中禁用「儲存」按鈕（顯示 loading 狀態）
+
+#### 2.0.4 圖書館設定大幅升級
+
+**Tab 切換式版面：**
+- 使用 `Segmented` 元件切換「館名管理」與「文件管理」兩個 Tab
+- 館名管理：卡片式網格（含封面圖片、文件數量、編輯/刪除按鈕）
+- 文件管理：表格式列表（含館名篩選、關鍵字搜尋、Dropdown 操作選單）
+
+**館封面圖片管理：**
+- 後端新增 `POST /api/library/catalogs/{id}/image` — 上傳館封面圖片（PNG/JPG，最大 5MB）
+- 後端新增 `GET /api/library/catalogs/{id}/image` — 取得館封面圖片（回傳 blob）
+- 後端新增 `DELETE /api/library/catalogs/{id}/image` — 刪除館封面圖片
+- 圖片儲存路徑：`uploads/{country_code}/catalog_images/{catalog_id}.{ext}`
+- `local_library_catalog` 表新增 `image_url` 欄位
+- 前端 `LibrarySettings.jsx` 新增封面圖片上傳/預覽/刪除 Modal
+- `CatalogCoverImage` memo 元件：非同步載入封面圖片（含 loading/fallback 狀態）
+- `api.js` 新增 `libraryAPI.uploadCatalogImage()`、`libraryAPI.getCatalogImage()`、`libraryAPI.deleteCatalogImage()`
+
+**編輯館 Modal（一站式管理）：**
+- 點擊館卡片的「編輯館」按鈕開啟
+- 功能：修改館名 + 管理封面圖片 + 查看/刪除館內文件
+- 館名變更時後端自動同步更新所有文件的 `library_name`
+- 後端新增 `PUT /api/library/catalogs/{id}` — 更新館名或描述
+- `api.js` 新增 `libraryAPI.updateCatalog()`
+
+**文件存取限制（細粒度權限）：**
+- 文件權限 Modal 新增「啟用存取限制」Switch 開關
+- 關閉開關 = 公開（所有人可存取）；開啟開關 = 限定指定使用者
+- 使用者清單改為 Checkbox 列表（含搜尋、顯示姓名/Email/部門）
+- 開啟限制但未選任何人時阻止儲存（顯示警告）
+- 開啟 Modal 時同時取得最新 doc 資料（確保 auth_rules 是最新的）
+
+**上傳離開確認視窗：**
+- 上傳文件 Modal 偵測表單是否有變更
+- 點擊關閉時若有未儲存變更，彈出確認視窗（「取消編輯」/「繼續編輯」）
+
+#### 2.0.5 統計報表（UsageStats）
+
+**圖書館統計：**
+- 後端新增 `GET /api/library/stats/summary` — 圖書館使用統計摘要
+  - 支援 `country`、`date_from`、`date_to` 篩選
+  - 回傳：總文件數、總下載次數、總預覽次數、各館統計、每日趨勢
+- 後端新增 `GET /api/library/stats/daily-detail` — 指定日期的文件閱覽/下載明細
+- 後端新增 `POST /api/library/{id}/view` — 記錄文件點擊（開啟文件 Modal 時呼叫）
+- `api.js` 新增 `libraryAPI.recordView()`、`libraryAPI.getStats()`、`libraryAPI.getDailyDetail()`
+
+**Agent 使用統計：**
+- 後端新增 `GET /api/chat/stats/summary` — Agent 使用統計摘要
+  - 支援 `country`、`date_from`、`date_to` 篩選
+  - 回傳：總對話數、各 Agent 使用次數、每日趨勢
+- `api.js` 新增 `chatAPI.getStats()`
+
+**前端統計報表頁面（`pages/settings/UsageStats.jsx`）：**
+- 日期範圍選擇器（預設近 30 天）
+- 圖書館統計：各館文件數/下載數/預覽數（表格 + 長條圖）
+- Agent 統計：各 Agent 對話次數（表格 + 長條圖）
+- 每日趨勢折線圖
+- `Sidebar.jsx` 設定子選單加入「統計報表」項目（需 `manage_library` 或 `manage_agent_permissions` 權限）
+
+#### 2.0.6 國家管理（CountryManagement）
+
+**後端新增：**
+- `GET /api/countries/all` — 取得全部國家含停用（root only）
+- `POST /api/countries` — 新增國家（root only）
+- `PUT /api/countries/{code}` — 編輯國家（root only）
+- `DELETE /api/countries/{code}` — 刪除國家（root only）
+- `countries` 表新增 `name_zh`、`name_en`、`sort_order`、`is_active` 欄位
+
+**前端新增（`pages/settings/CountryManagement.jsx`）：**
+- 國家列表（含代碼、中文名稱、英文名稱、排序、啟用狀態）
+- 新增/編輯國家 Modal（代碼建立後不可修改）
+- 刪除國家（含二次確認）
+- 提示：新增國家後需由 DevOps 設定 `.env` 的 DB 連線
+- `api.js` 新增 `countryAPI.listAll()`、`countryAPI.create()`、`countryAPI.update()`、`countryAPI.delete()`
+- `Sidebar.jsx` 設定子選單加入「國家管理」項目（需 `cross_country_logs` 權限，即 root only）
+- `App.jsx` 新增 `/settings/country-management` 路由
+
+#### 2.0.7 AgentChat 圖片上傳
+
+- 聊天輸入框新增圖片上傳按鈕（`PictureOutlined` 圖示）
+- 支援最多 N 張圖片（PNG/JPG/GIF/WebP，最大 10MB/張）
+- 圖片以 base64 格式附加到訊息（`images` 欄位）
+- `chatAPI.stream()` 過濾空 `images` 陣列（不傳給後端）
+- `i18n` 新增 `agentChat.uploadImage`、`agentChat.imageMessage`、`agentChat.maxImagesWarning`、`agentChat.notImageFile`、`agentChat.imageTooLarge`、`agentChat.imageReadFailed`
+
+#### 2.0.8 AgentChat Session 搜尋
+
+- Session 列表新增搜尋框（`agentChat.searchSession`）
+- 搜尋範圍選擇：全部 / Session 名稱 / 對話內容
+- `i18n` 新增 `agentChat.searchSession`、`agentChat.searchSessionType`、`agentChat.searchTypeAll`、`agentChat.searchTypeTitle`、`agentChat.searchTypeContent`
+
+#### 2.0.9 稽核日誌新增操作類型
+
+新增以下稽核操作類型（`AuditAction` 常數 + i18n 翻譯）：
+- `library.view` — 點擊文件（開啟 Modal）
+- `library.preview` — 預覽文件 PDF
+- `library.auth_update` — 更新文件權限
+- `chat.send` — 發送聊天訊息
+- `chat.session_delete` — 刪除對話
+- `pii.detected_chat` — 聊天偵測到個資
+- `pii.blocked_upload` — 上傳因個資被阻擋
+- `pii.blocked_chat` — 聊天因個資被阻擋
+
+#### 2.0.10 API 端點新增總覽
+
+| 模組 | 端點 | 方法 | 說明 |
+|------|------|------|------|
+| 認證 | `/api/auth/profile` | PATCH | 更新個人顯示名稱 |
+| | `/api/auth/avatar` | POST | 上傳頭貼 |
+| | `/api/auth/avatar` | GET | 取得頭貼圖片 |
+| | `/api/auth/avatar` | DELETE | 刪除頭貼 |
+| 圖書館 | `/api/library/catalogs/{id}` | PUT | 更新館名/描述（同步所有文件） |
+| | `/api/library/catalogs/{id}/image` | POST | 上傳館封面圖片 |
+| | `/api/library/catalogs/{id}/image` | GET | 取得館封面圖片 |
+| | `/api/library/catalogs/{id}/image` | DELETE | 刪除館封面圖片 |
+| | `/api/library/{id}/view` | POST | 記錄文件點擊 |
+| | `/api/library/stats/summary` | GET | 圖書館使用統計摘要 |
+| | `/api/library/stats/daily-detail` | GET | 每日文件閱覽/下載明細 |
+| 對話 | `/api/chat/stats/summary` | GET | Agent 使用統計摘要 |
+| 國家 | `/api/countries/all` | GET | 全部國家含停用（root only） |
+| | `/api/countries` | POST | 新增國家（root only） |
+| | `/api/countries/{code}` | PUT | 編輯國家（root only） |
+| | `/api/countries/{code}` | DELETE | 刪除國家（root only） |
+| 公告 | `/api/announcements/create-with-files` | POST | 一步到位建立公告含附件 |
+
+---
+
 ## 10. 待完成的工作
 
 ### 🔲 Phase 5：外部服務整合
@@ -644,6 +821,7 @@ PII_BLOCK_CHAT=true           # 阻擋含 PII 的聊天訊息（Phase 6.2 新增
 ## 11. Git 歷史
 
 ```
+(pending) feat: v2.0 — 個人資料/頭貼、圖書館封面圖片、編輯館、統計報表、國家管理、公告批次發布、圖片上傳
 (pending) feat: Phase 6.2 PII 阻擋上傳模式 — 偵測到 PII 時拒絕上傳/發送 + 清理檔案
 (pending) feat: Phase 6.1 PII Detection & Redaction — Presidio 整合 + 三場景掃描/脫敏
 (pending) fix: 對話歷史頁面小螢幕水平溢出修復 — Layout/ChatHistory CSS min-width + 響應式
@@ -660,4 +838,4 @@ PII_BLOCK_CHAT=true           # 阻擋含 PII 的聊天訊息（Phase 6.2 新增
 
 ---
 
-> **最後更新**：2026-03-11
+> **最後更新**：2026-06-26（v2.0）

@@ -405,6 +405,134 @@ export const libraryAPI = {
     api.get('/library/stats/daily-detail', { params }),
 };
 
+// ===== 全域圖書館管理 API（管理端，需 manage_library 權限）=====
+export const globalLibraryAPI = {
+  // --- 全域館目錄 ---
+
+  /** 取得全域館清單（可依國家篩選）
+   * @param {object} [params] - { country_code? }
+   */
+  listCatalogs: (params = {}) =>
+    api.get('/global-library/catalogs', { params }),
+
+  /** 建立新全域館
+   * @param {object} data - { catalog_name, description? }
+   */
+  createCatalog: (data) =>
+    api.post('/global-library/catalogs', data),
+
+  /** 更新全域館名稱或描述
+   * @param {string} catalogId - 館 ID
+   * @param {object} data - { catalog_name?, description? }
+   */
+  updateCatalog: (catalogId, data) =>
+    api.put(`/global-library/catalogs/${catalogId}`, data),
+
+  /** 刪除全域館（僅限空館）
+   * @param {string} catalogId - 館 ID
+   */
+  deleteCatalog: (catalogId) =>
+    api.delete(`/global-library/catalogs/${catalogId}`),
+
+  /** 上傳全域館封面圖片（PNG/JPG，≤5MB）
+   * @param {string} catalogId - 館 ID
+   * @param {FormData} formData - 包含 file 的 FormData
+   */
+  uploadCatalogImage: (catalogId, formData) =>
+    api.post(`/global-library/catalogs/${catalogId}/image`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
+  /** 刪除全域館封面圖片
+   * @param {string} catalogId - 館 ID
+   */
+  deleteCatalogImage: (catalogId) =>
+    api.delete(`/global-library/catalogs/${catalogId}/image`),
+
+  /** 取得全域館封面圖片（回傳 blob）
+   * @param {string} catalogId - 館 ID
+   */
+  getCatalogImage: (catalogId) =>
+    api.get(`/global-library/catalogs/${catalogId}/image`, { responseType: 'blob' }),
+
+  // --- 全域文件管理 ---
+
+  /** 列出所有全域文件（含分發狀態）
+   * @param {object} [params] - { catalog_name?, country_code?, is_active? }
+   */
+  listDocs: (params = {}) =>
+    api.get('/global-library/docs', { params }),
+
+  /** 取得單一全域文件詳情（含完整分發規則）
+   * @param {string} docId - 文件 ID
+   */
+  getDoc: (docId) =>
+    api.get(`/global-library/docs/${docId}`),
+
+  /**
+   * 上傳全域文件並設定分發規則
+   * @param {FormData} formData - 包含 file、name、description、distributions（JSON 字串）
+   *
+   * distributions 格式（JSON 字串）：
+   * [
+   *   { "country_code": "TW", "catalog_name": "法規館", "auth_rules": {...}, "is_active": true },
+   *   { "country_code": "HK", "catalog_name": "產品館", "auth_rules": {...}, "is_active": true }
+   * ]
+   */
+  upload: (formData) =>
+    api.post('/global-library/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
+  /** 更新全域文件資訊（名稱、描述、啟用狀態）
+   * @param {string} docId - 文件 ID
+   * @param {object} data - { name?, description?, is_active? }
+   */
+  updateDoc: (docId, data) =>
+    api.put(`/global-library/docs/${docId}`, data),
+
+  /** 刪除全域文件（同時刪除所有分發規則和實體檔案）
+   * @param {string} docId - 文件 ID
+   */
+  deleteDoc: (docId) =>
+    api.delete(`/global-library/docs/${docId}`),
+
+  /** 追加上傳附件到已有全域文件
+   * @param {string} docId - 文件 ID
+   * @param {FormData} formData - 包含 file 的 FormData
+   */
+  uploadFile: (docId, formData) =>
+    api.post(`/global-library/docs/${docId}/upload-file`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
+  /** 刪除全域文件的單一附件
+   * @param {string} docId - 文件 ID
+   * @param {string} filename - 要刪除的附件檔名
+   */
+  deleteFile: (docId, filename) =>
+    api.delete(`/global-library/docs/${docId}/file`, { params: { filename } }),
+
+  // --- 分發規則管理 ---
+
+  /** 取得某文件的所有分發規則
+   * @param {string} docId - 文件 ID
+   */
+  getDistributions: (docId) =>
+    api.get(`/global-library/docs/${docId}/distributions`),
+
+  /**
+   * 批次更新文件的分發規則（upsert 模式）
+   * @param {string} docId - 文件 ID
+   * @param {Array} rules - 分發規則陣列
+   * [
+   *   { country_code, catalog_name, auth_rules: { authorized_roles, authorized_users, exception_list }, is_active }
+   * ]
+   */
+  updateDistributions: (docId, rules) =>
+    api.put(`/global-library/docs/${docId}/distributions`, rules),
+};
+
 // ===== 對話 API =====
 export const chatAPI = {
   /** 非 streaming 發送訊息 */

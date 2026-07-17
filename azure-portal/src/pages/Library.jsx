@@ -16,7 +16,7 @@ import {
   LoadingOutlined,
   PictureOutlined,
 } from '@ant-design/icons';
-import { libraryAPI } from '../services/api';
+import { libraryAPI, globalLibraryAPI } from '../services/api';
 import { adaptLibraryDocs, adaptCatalogs } from '../utils/adapters';
 import { libraries as mockLibraries } from '../data/mockData';
 import { useCountry } from '../contexts/CountryContext';
@@ -63,7 +63,7 @@ const getFileIcon = (filename) => {
 
 
 /** 館封面圖片元件（需要 auth 的圖片載入） */
-const LibraryCoverImage = memo(({ catalogId, country }) => {
+const LibraryCoverImage = memo(({ catalogId }) => {
   const [src, setSrc] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -72,7 +72,7 @@ const LibraryCoverImage = memo(({ catalogId, country }) => {
     let cancelled = false;
     setLoading(true);
 
-    libraryAPI.getCatalogImage(catalogId, country)
+    globalLibraryAPI.getCatalogImage(catalogId)
       .then((res) => {
         if (cancelled) return;
         url = URL.createObjectURL(res.data);
@@ -89,7 +89,7 @@ const LibraryCoverImage = memo(({ catalogId, country }) => {
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [catalogId, country]);
+  }, [catalogId]);
 
   if (loading) {
     return (
@@ -403,7 +403,7 @@ const Library = () => {
                   onClick={() => setSelectedLibrary(lib)}
                 >
                   {lib.imageUrl ? (
-                    <LibraryCoverImage catalogId={lib.id} country={effectiveCountry} />
+                    <LibraryCoverImage catalogId={lib.id} />
                   ) : (
                     <div className="library-card-image-placeholder">
                       <PictureOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />

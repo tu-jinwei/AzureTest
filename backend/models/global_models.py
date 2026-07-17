@@ -67,21 +67,56 @@ class AgentACL(GlobalBase):
     })
 
 
-class GlobalLibrary(GlobalBase):
-    """全域圖書館"""
-    __tablename__ = "global_library"
+class GlobalDocument(GlobalBase):
+    """全域文件主表（重構自 GlobalLibrary，支援跨國分發）"""
+    __tablename__ = "global_document"
 
     doc_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    library_name = Column(String(255), nullable=False)
     name = Column(String(255), nullable=False)
     description = Column(Text)
     metadata_json = Column("metadata", JSONB, nullable=False, default={})
+    # auth_rules 欄位：v3 migration 建立時包含此欄位（NOT NULL），保留以相容 DB schema
+    # 實際存取規則已移至 global_document_distribution.auth_rules
     auth_rules = Column(JSONB, nullable=False, default={
         "authorized_roles": [],
         "authorized_users": [],
         "exception_list": [],
     })
-    file_url = Column(Text)
+    file_url = Column(Text)  # 向後相容：第一個檔案路徑
+    files_json = Column("files", JSONB, nullable=False, default=[])  # 多檔案清單
+    uploaded_by = Column(String(255))  # 上傳者 email
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class GlobalDocumentDistribution(GlobalBase):
+    """文件分發規則表：記錄每份文件分發到哪些國家的哪個館，以及各國存取規則"""
+    __tablename__ = "global_document_distribution"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    doc_id = Column(UUID(as_uuid=True), nullable=False)  # FK to global_document.doc_id
+    country_code = Column(String(5), nullable=False)      # TW / HK / SG / US
+    catalog_name = Column(String(255), nullable=False)    # 在該國放入的館名
+    auth_rules = Column(JSONB, nullable=False, default={
+        "authorized_roles": [],
+        "authorized_users": [],
+        "exception_list": [],
+    })
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class GlobalCatalog(GlobalBase):
+    """全域館目錄：各國各自管理自己的館名清單"""
+    __tablename__ = "global_catalog"
+
+    catalog_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    catalog_name = Column(String(255), nullable=False)
+    country_code = Column(String(5), nullable=False, default='')  # 所屬國家代碼，空字串表示舊資料
+    description = Column(Text)
+    image_url = Column(Text)  # 館封面圖片路徑（uploads/global/catalog/{catalog_id}/cover.{ext}）
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
